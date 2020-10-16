@@ -13,9 +13,9 @@ For example, the straight line shape requires a 4x4 grid, and would initially be
     +---+---+---+---+
     |   |   |   |   |
     +---+---+---+---+
-    |   |   |   |   |
-    +---+---+---+---+
     | X | X | X | X |
+    +---+---+---+---+
+    |   |   |   |   |
     +---+---+---+---+
     |   |   |   |   |
     +---+---+---+---+
@@ -23,13 +23,13 @@ For example, the straight line shape requires a 4x4 grid, and would initially be
 When rotated clockwise, this would become:
 
     +---+---+---+---+
-    |   | X |   |   |
+    |   |   | X |   |
     +---+---+---+---+
-    |   | X |   |   |
+    |   |   | X |   |
     +---+---+---+---+
-    |   | X |   |   |
+    |   |   | X |   |
     +---+---+---+---+
-    |   | X |   |   |
+    |   |   | X |   |
     +---+---+---+---+
 
 In the example of the shape which "a plus sign with a bit missing", it only requires a 3x3 grid:
@@ -57,6 +57,9 @@ and up the left of the grid, and coordinates indices are 0-based.
 
 -}
 
+-- test
+-- sadf
+
 import Block
 
 
@@ -65,12 +68,7 @@ type Shape
 
 
 type alias ShapeData =
-    { gridSize : GridSize, blocks : List Block.Coord, colour : Block.Colour }
-
-
-type GridSize
-    = Three
-    | Four
+    { gridSize : Int, blocks : List Block.Coord, colour : Block.Colour }
 
 
 type RotationDirection
@@ -89,27 +87,31 @@ for generating all possible shapes.
 builders : List (Block.Colour -> Shape)
 builders =
     [ -- Straight line (initially horizontal)
-      { gridSize = Four, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 3, 1 ) ] }
+      { gridSize = 4, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 2, 2 ), ( 3, 2 ) ] }
     , -- L-shape on its back:
       --     x
       -- x x x
-      { gridSize = Three, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 2, 2 ) ] }
+      { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 2, 2 ) ] }
     , -- Mirror image of the above:
       -- x
       -- x x x
-      { gridSize = Three, blocks = [ ( 0, 2 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ) ] }
+      { gridSize = 3, blocks = [ ( 0, 2 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ) ] }
     , -- Plus-sign with a bit on the bottom missing:
       --   x
       -- x x x
-      { gridSize = Three, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 1 ) ] }
+      { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 1 ) ] }
     , -- Almost a "z-shape":
       -- x x
       --   x x
-      { gridSize = Three, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 1, 1 ), ( 2, 1 ) ] }
+      { gridSize = 3, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 1, 1 ), ( 2, 1 ) ] }
     , -- Mirror image of the above:
       --   x x
       -- x x
-      { gridSize = Three, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 2 ) ] }
+      { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 2 ) ] }
+    , -- Square:
+      -- x x
+      -- x x
+      { gridSize = 2, blocks = [ ( 0, 0 ), ( 0, 1 ), ( 1, 0 ), ( 1, 1 ) ] }
     ]
         |> List.map (\{ gridSize, blocks } colour -> Shape { gridSize = gridSize, blocks = blocks, colour = colour })
 
@@ -119,9 +121,9 @@ rotate direction (Shape shapeData) =
     let
         calcCoords : Block.Coord -> Block.Coord
         calcCoords =
-            case ( direction, shapeData.gridSize ) of
-                ( Clockwise, Three ) ->
-                    -- The centre-point is at coordinate (1,1), which has an actual cell in it. For example, this:
+            case direction of
+                Clockwise ->
+                    -- Take this shape:
                     --     +---+---+---+
                     --     |   | X |   |
                     --     +---+---+---+
@@ -129,7 +131,7 @@ rotate direction (Shape shapeData) =
                     --     +---+---+---+
                     --     |   |   |   |
                     --     +---+---+---+
-                    -- Becomes this:
+                    -- When rotated clockwise this becomes:
                     --     +---+---+---+
                     --     |   | X |   |
                     --     +---+---+---+
@@ -137,21 +139,48 @@ rotate direction (Shape shapeData) =
                     --     +---+---+---+
                     --     |   | X |   |
                     --     +---+---+---+
-                    -- Turning clockwise, the coordinates change as follows:
+                    -- The coordinates change as follows:
                     --     (0,1) -> (1,2)
                     --     (1,1) -> (1,1)
                     --     (1,2) -> (2,1)
                     --     (2,1) -> (1,0)
                     -- So as can be seen, the new y-coordinate is the original x-coordinate subtracted from 2,
-                    -- and the new x-coordinate is the original y-coordinate
-                    \( x, y ) -> ( y, 2 - x )
+                    -- and the new x-coordinate is the original y-coordinate.
+                    --
+                    -- Now take this shape:
+                    --     +---+---+---+---+
+                    --     |   |   |   |   |
+                    --     +---+---+---+---+
+                    --     | X | X | X | X |
+                    --     +---+---+---+---+
+                    --     |   |   |   |   |
+                    --     +---+---+---+---+
+                    --     |   |   |   |   |
+                    --     +---+---+---+---+
+                    -- Becomes this when rotated clockwise:
+                    --     +---+---+---+---+
+                    --     |   |   | X |   |
+                    --     +---+---+---+---+
+                    --     |   |   | X |   |
+                    --     +---+---+---+---+
+                    --     |   |   | X |   |
+                    --     +---+---+---+---+
+                    --     |   |   | X |   |
+                    --     +---+---+---+---+
+                    -- The coordinates change as follows:
+                    --     (0,2) -> (2,3)
+                    --     (1,2) -> (2,2)
+                    --     (2,2) -> (2,1)
+                    --     (3,2) -> (2,0)
+                    -- So as can be seen, the new y-coordinate is the original x-coordinate subtracted from 3,
+                    -- and the new x-coordinate is the original y-coordinate.
+                    --
+                    -- So given the grid size, we can rotate the shape clockwise using this formula:
+                    \( x, y ) -> ( y, shapeData.gridSize - 1 - x )
 
-                ( Anticlockwise, Three ) ->
+                Anticlockwise ->
                     -- The opposite of the above: the new y-coordinate is the original x-coordinate, and he new
-                    -- x-coordinate is the original y-coordinate subtracted from 2.
-                    \( x, y ) -> ( 2 - y, x )
-
-                _ ->
-                    Debug.todo "implement"
+                    -- x-coordinate is the original y-coordinate subtracted from (gridSize - 1).
+                    \( x, y ) -> ( shapeData.gridSize - 1 - y, x )
     in
     Shape { shapeData | blocks = List.map calcCoords shapeData.blocks }

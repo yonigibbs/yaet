@@ -20,6 +20,12 @@ suite =
         [ describe "rotate" <|
             List.concat
                 [ allRotationTests "L-shape" ellShape
+                , allRotationTests "L-shape-mirror" ellShapeMirror
+                , allRotationTests "Z-shape" zedShape
+                , allRotationTests "Z-shape-mirror" zedShapeMirror
+                , allRotationTests "Almost-plus-sign-shape" almostPlusSignShape
+                , allRotationTests "Straight-line" lineShape
+                , allRotationTests "Square" square
                 ]
         ]
 
@@ -92,6 +98,31 @@ type alias ShapeAsString =
 ellShape : ShapeAsString
 ellShape =
     { org = """
+--x
+xxx
+---
+"""
+    , clockwise = """
+-x-
+-x-
+-xx
+"""
+    , anticlockwise = """
+xx-
+-x-
+-x-
+"""
+    , oneEighty = """
+---
+xxx
+x--
+"""
+    }
+
+
+ellShapeMirror : ShapeAsString
+ellShapeMirror =
+    { org = """
 x--
 xxx
 ---
@@ -110,5 +141,125 @@ xx-
 ---
 xxx
 --x
+"""
+    }
+
+
+zedShape : ShapeAsString
+zedShape =
+    { org = """
+xx-
+-xx
+---
+"""
+    , clockwise = """
+--x
+-xx
+-x-
+"""
+    , anticlockwise = """
+-x-
+xx-
+x--
+"""
+    , oneEighty = """
+---
+xx-
+-xx
+"""
+    }
+
+
+zedShapeMirror : ShapeAsString
+zedShapeMirror =
+    { org = """
+-xx
+xx-
+---
+"""
+    , clockwise = """
+-x-
+-xx
+--x
+"""
+    , anticlockwise = """
+x--
+xx-
+-x-
+"""
+    , oneEighty = """
+---
+-xx
+xx-
+"""
+    }
+
+
+almostPlusSignShape : ShapeAsString
+almostPlusSignShape =
+    { org = """
+-x-
+xxx
+---
+"""
+    , clockwise = """
+-x-
+-xx
+-x-
+"""
+    , anticlockwise = """
+-x-
+xx-
+-x-
+"""
+    , oneEighty = """
+---
+xxx
+-x-
+"""
+    }
+
+
+square : ShapeAsString
+square =
+    let
+        squareBlocks =
+            """
+xx
+xx
+"""
+    in
+    { org = squareBlocks
+    , clockwise = squareBlocks
+    , anticlockwise = squareBlocks
+    , oneEighty = squareBlocks
+    }
+
+
+lineShape : ShapeAsString
+lineShape =
+    { org = """
+----
+xxxx
+----
+----
+"""
+    , clockwise = """
+--x-
+--x-
+--x-
+--x-
+"""
+    , anticlockwise = """
+-x--
+-x--
+-x--
+-x--
+"""
+    , oneEighty = """
+----
+----
+xxxx
+----
 """
     }
