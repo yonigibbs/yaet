@@ -4,6 +4,9 @@ module Block exposing (Colour(..), Coord)
 dropping, or part of the board, once it's landed.
 -}
 
+-- TODO: does the name of this module make sense? It's here as the types in it are required by higher-level modules like
+-- `Game` and `Board`. Maybe it should just be called `Common` or something like that?
+
 
 {-| The colour of a block which forms part of a shape and eventually part of the board, when it lands.
 -}

@@ -1,4 +1,4 @@
-module Board exposing (Board, append, areCellsAvailable, emptyBoard, occupiedCells, xSize, ySize)
+module Board exposing (Board, OccupiedCell, append, areCellsAvailable, emptyBoard, occupiedCells, xSize, ySize)
 
 {-| This module contains functionality related to representing a board. This is a 10x20 grid with cells, which can either
 be empty or have a block in them. Importantly, the board represents only _landed_ blocks: the shape which is currently
@@ -9,15 +9,23 @@ import Array exposing (Array)
 import Block
 
 
+{-| Represents the board. This is a 10x20 grid with cells, which can either be empty or have a block in them.
+Importantly, the board represents only _landed_ blocks: the shape which is currently dropping (and which is rendered
+onto the grid represented by the board), is _not_ part of the data in the board.
+-}
 type Board
     = Board (Array Row)
 
 
+{-| A cell in the board: either `Empty` or `Occupied`, in which case it has a colour associated with it.
+-}
 type Cell
     = Empty
     | Occupied Block.Colour
 
 
+{-| A row in the grid. An alias for an array of `Cell`s.
+-}
 type alias Row =
     Array Cell
 

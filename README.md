@@ -22,3 +22,4 @@ Current state: WIP.
 - [ ] High scores (persisted to local storage)
 - [ ] Settings/preferences (persisted to local storage)
 - [ ] Investigate "Hold" feature in some versions
+- [ ] TODOs in the code

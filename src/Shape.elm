@@ -63,10 +63,14 @@ and up the left of the grid, and coordinates indices are 0-based.
 import Block
 
 
+{-| A shape currently in the process of dropping down the board.
+-}
 type Shape
     = Shape ShapeData
 
 
+{-| The data associated with a `Shape`.
+-}
 type alias ShapeData =
     { gridSize : Int, blocks : List Block.Coord, colour : Block.Colour }
 
@@ -76,6 +80,8 @@ type RotationDirection
     | Anticlockwise
 
 
+{-| Gets the data associated with the passed in shape.
+-}
 data : Shape -> ShapeData
 data (Shape shapeData) =
     shapeData
@@ -116,6 +122,8 @@ builders =
         |> List.map (\{ gridSize, blocks } colour -> Shape { gridSize = gridSize, blocks = blocks, colour = colour })
 
 
+{-| Rotates the supplied shape in the given direction.
+-}
 rotate : RotationDirection -> Shape -> Shape
 rotate direction (Shape shapeData) =
     let
