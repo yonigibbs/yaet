@@ -62,6 +62,7 @@ findShape asciiShape =
             AsciiGrid.build asciiShape
     in
     Shape.builders
+        |> (\( first, rest ) -> first :: rest)
         |> List.map (\buildShape -> buildShape Block.Blue)
         |> List.filter (\shape_ -> (Shape.data shape_ |> .blocks |> List.sort) == blocks)
         |> List.head

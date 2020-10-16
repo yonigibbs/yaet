@@ -1,4 +1,4 @@
-module Shape exposing (RotationDirection(..), Shape, ShapeData, builders, data, rotate)
+module Shape exposing (RotationDirection(..), Shape, ShapeBuilder, ShapeData, builders, data, rotate)
 
 {-| A shape represents a set of four contiguous blocks currently falling from the top of the board to the bottom. Once
 it lands, the blocks that make up that shape become part of the board itself, and are no longer represented by a shape.
@@ -87,39 +87,51 @@ data (Shape shapeData) =
     shapeData
 
 
-{-| A list of functions, each of which creates a different shape, of some given colour. This list contains the functions
-for generating all possible shapes.
+{-| A function which is used to generate a valid shape.
 -}
-builders : List (Block.Colour -> Shape)
+type alias ShapeBuilder =
+    Block.Colour -> Shape
+
+
+{-| A list of functions, each of which creates a different shape, of some given colour. This list contains the functions
+for generating all possible shapes. As this has to be known to the compiler to be non-empty, a tuple is returned with a
+default shape builder, followed by the rest of the shape builders.
+-}
+builders : ( ShapeBuilder, List ShapeBuilder )
 builders =
-    [ -- Straight line (initially horizontal)
-      { gridSize = 4, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 2, 2 ), ( 3, 2 ) ] }
-    , -- L-shape on its back:
-      --     x
-      -- x x x
-      { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 2, 2 ) ] }
-    , -- Mirror image of the above:
-      -- x
-      -- x x x
-      { gridSize = 3, blocks = [ ( 0, 2 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ) ] }
-    , -- Plus-sign with a bit on the bottom missing:
-      --   x
-      -- x x x
-      { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 1 ) ] }
-    , -- Almost a "z-shape":
-      -- x x
-      --   x x
-      { gridSize = 3, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 1, 1 ), ( 2, 1 ) ] }
-    , -- Mirror image of the above:
-      --   x x
-      -- x x
-      { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 2 ) ] }
-    , -- Square:
-      -- x x
-      -- x x
-      { gridSize = 2, blocks = [ ( 0, 0 ), ( 0, 1 ), ( 1, 0 ), ( 1, 1 ) ] }
-    ]
-        |> List.map (\{ gridSize, blocks } colour -> Shape { gridSize = gridSize, blocks = blocks, colour = colour })
+    let
+        convertToBuilder =
+            \{ gridSize, blocks } colour -> Shape { gridSize = gridSize, blocks = blocks, colour = colour }
+    in
+    ( -- Straight line (initially horizontal)
+      convertToBuilder { gridSize = 4, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 2, 2 ), ( 3, 2 ) ] }
+    , List.map convertToBuilder
+        [ -- L-shape on its back:
+          --     x
+          -- x x x
+          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 2, 2 ) ] }
+        , -- Mirror image of the above:
+          -- x
+          -- x x x
+          { gridSize = 3, blocks = [ ( 0, 2 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ) ] }
+        , -- Plus-sign with a bit on the bottom missing:
+          --   x
+          -- x x x
+          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 1 ) ] }
+        , -- Almost a "z-shape":
+          -- x x
+          --   x x
+          { gridSize = 3, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 1, 1 ), ( 2, 1 ) ] }
+        , -- Mirror image of the above:
+          --   x x
+          -- x x
+          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 2 ) ] }
+        , -- Square:
+          -- x x
+          -- x x
+          { gridSize = 2, blocks = [ ( 0, 0 ), ( 0, 1 ), ( 1, 0 ), ( 1, 1 ) ] }
+        ]
+    )
 
 
 {-| Rotates the supplied shape in the given direction.
