@@ -1,9 +1,8 @@
 module ShapeTests exposing (suite)
 
+import AsciiGrid
 import Block
 import Expect exposing (Expectation)
-import Fuzz exposing (Fuzzer, int, list, string)
-import Parser exposing ((|.), (|=), Parser)
 import Shape exposing (Shape)
 import Test exposing (..)
 
@@ -48,7 +47,7 @@ rotationTest testDescr orgShape direction turns expectedShape =
                 |> Maybe.map Shape.data
                 |> Maybe.map .blocks
                 |> Maybe.map List.sort
-                |> Expect.equal (Just <| shapeBlocks expectedShape)
+                |> Expect.equal (Just <| AsciiGrid.build expectedShape)
 
 
 rotateXTimes : Shape.RotationDirection -> Int -> Shape -> Shape
@@ -57,38 +56,15 @@ rotateXTimes direction turns shape =
 
 
 findShape : String -> Maybe Shape
-findShape =
-    shapeBlocks >> findShapeFromBlocks
-
-
-findShapeFromBlocks : List Block.Coord -> Maybe Shape
-findShapeFromBlocks blocks =
+findShape asciiShape =
     let
-        soughtBlocks =
-            List.sort blocks
+        blocks =
+            AsciiGrid.build asciiShape
     in
     Shape.builders
         |> List.map (\buildShape -> buildShape Block.Blue)
-        |> List.filter (\shape -> (Shape.data shape |> .blocks |> List.sort) == soughtBlocks)
+        |> List.filter (\shape_ -> (Shape.data shape_ |> .blocks |> List.sort) == blocks)
         |> List.head
-
-
-shapeBlocks : String -> List Block.Coord
-shapeBlocks string =
-    let
-        lineCoords : Int -> String -> List Block.Coord
-        lineCoords lineIndex lineText =
-            String.indexes "x" lineText
-                |> List.map (\xIndex -> ( xIndex, lineIndex ))
-    in
-    string
-        |> String.dropLeft 1
-        |> String.dropRight 1
-        |> String.lines
-        |> List.reverse
-        |> List.indexedMap lineCoords
-        |> List.concat
-        |> List.sort
 
 
 type alias ShapeAsString =
