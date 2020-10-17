@@ -42,12 +42,17 @@ rotationTest : String -> String -> Shape.RotationDirection -> Int -> String -> T
 rotationTest testDescr orgShape direction turns expectedShape =
     test testDescr <|
         \_ ->
+            let
+                expectedBlocks =
+                    AsciiGrid.build expectedShape AsciiGrid.blockColourConfig
+                        |> List.map Tuple.first
+            in
             findShape orgShape
                 |> Maybe.map (rotateXTimes direction turns)
                 |> Maybe.map Shape.data
                 |> Maybe.map .blocks
                 |> Maybe.map List.sort
-                |> Expect.equal (Just <| AsciiGrid.build expectedShape)
+                |> Expect.equal (Just expectedBlocks)
 
 
 rotateXTimes : Shape.RotationDirection -> Int -> Shape -> Shape
@@ -58,13 +63,13 @@ rotateXTimes direction turns shape =
 findShape : String -> Maybe Shape
 findShape asciiShape =
     let
-        blocks =
-            AsciiGrid.build asciiShape
+        blockCoords =
+            AsciiGrid.build asciiShape AsciiGrid.blockColourConfig |> List.map Tuple.first
     in
     Shape.builders
         |> (\( first, rest ) -> first :: rest)
         |> List.map (\buildShape -> buildShape Block.Blue)
-        |> List.filter (\shape_ -> (Shape.data shape_ |> .blocks |> List.sort) == blocks)
+        |> List.filter (\shape_ -> (Shape.data shape_ |> .blocks |> List.sort) == blockCoords)
         |> List.head
 
 
@@ -75,24 +80,24 @@ type alias ShapeAsString =
 ellShape : ShapeAsString
 ellShape =
     { org = """
---x
-xxx
+--b
+bbb
 ---
 """
     , clockwise = """
--x-
--x-
--xx
+-b-
+-b-
+-bb
 """
     , anticlockwise = """
-xx-
--x-
--x-
+bb-
+-b-
+-b-
 """
     , oneEighty = """
 ---
-xxx
-x--
+bbb
+b--
 """
     }
 
@@ -100,24 +105,24 @@ x--
 ellShapeMirror : ShapeAsString
 ellShapeMirror =
     { org = """
-x--
-xxx
+b--
+bbb
 ---
 """
     , clockwise = """
--xx
--x-
--x-
+-bb
+-b-
+-b-
 """
     , anticlockwise = """
--x-
--x-
-xx-
+-b-
+-b-
+bb-
 """
     , oneEighty = """
 ---
-xxx
---x
+bbb
+--b
 """
     }
 
@@ -125,24 +130,24 @@ xxx
 zedShape : ShapeAsString
 zedShape =
     { org = """
-xx-
--xx
+bb-
+-bb
 ---
 """
     , clockwise = """
---x
--xx
--x-
+--b
+-bb
+-b-
 """
     , anticlockwise = """
--x-
-xx-
-x--
+-b-
+bb-
+b--
 """
     , oneEighty = """
 ---
-xx-
--xx
+bb-
+-bb
 """
     }
 
@@ -150,24 +155,24 @@ xx-
 zedShapeMirror : ShapeAsString
 zedShapeMirror =
     { org = """
--xx
-xx-
+-bb
+bb-
 ---
 """
     , clockwise = """
--x-
--xx
---x
+-b-
+-bb
+--b
 """
     , anticlockwise = """
-x--
-xx-
--x-
+b--
+bb-
+-b-
 """
     , oneEighty = """
 ---
--xx
-xx-
+-bb
+bb-
 """
     }
 
@@ -175,24 +180,24 @@ xx-
 almostPlusSignShape : ShapeAsString
 almostPlusSignShape =
     { org = """
--x-
-xxx
+-b-
+bbb
 ---
 """
     , clockwise = """
--x-
--xx
--x-
+-b-
+-bb
+-b-
 """
     , anticlockwise = """
--x-
-xx-
--x-
+-b-
+bb-
+-b-
 """
     , oneEighty = """
 ---
-xxx
--x-
+bbb
+-b-
 """
     }
 
@@ -202,8 +207,8 @@ square =
     let
         squareBlocks =
             """
-xx
-xx
+bb
+bb
 """
     in
     { org = squareBlocks
@@ -217,26 +222,26 @@ lineShape : ShapeAsString
 lineShape =
     { org = """
 ----
-xxxx
+bbbb
 ----
 ----
 """
     , clockwise = """
---x-
---x-
---x-
---x-
+--b-
+--b-
+--b-
+--b-
 """
     , anticlockwise = """
--x--
--x--
--x--
--x--
+-b--
+-b--
+-b--
+-b--
 """
     , oneEighty = """
 ----
 ----
-xxxx
+bbbb
 ----
 """
     }

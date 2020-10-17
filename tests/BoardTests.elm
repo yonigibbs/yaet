@@ -5,8 +5,9 @@ way. Instead, we start off with an empty board, then build it up by appending ce
 -}
 
 import AsciiGrid
-import Block
+import Block exposing (BlockColour)
 import Board exposing (Board)
+import Dict
 import Expect
 import Test exposing (Test, describe, test)
 
@@ -16,51 +17,66 @@ suite =
     describe "Board"
         [ describe "occupiedCells" <|
             [ occupiedCellsTest "Empty board" "" []
-            , occupiedCellsTest "Populated board" """
-x----xx-xx-
-x---x-xx-x-
-""" [ ( 0, 0 ), ( 4, 0 ), ( 6, 0 ), ( 7, 0 ), ( 9, 0 ), ( 0, 1 ), ( 5, 1 ), ( 6, 1 ), ( 8, 1 ), ( 9, 1 ) ]
+            , occupiedCellsTest "Populated board"
+                """
+y----pp-yg-
+b---g-ro-b-
+"""
+                [ -- First row
+                  ( ( 0, 0 ), Block.Blue )
+                , ( ( 4, 0 ), Block.Green )
+                , ( ( 6, 0 ), Block.Red )
+                , ( ( 7, 0 ), Block.Orange )
+                , ( ( 9, 0 ), Block.Blue )
+
+                -- Second row
+                , ( ( 0, 1 ), Block.Yellow )
+                , ( ( 5, 1 ), Block.Purple )
+                , ( ( 6, 1 ), Block.Purple )
+                , ( ( 8, 1 ), Block.Yellow )
+                , ( ( 9, 1 ), Block.Green )
+                ]
             ]
         , describe "append" <|
-            [ appendTest "Append straight line at bottom left of empty board" "" "xxxx" "xxxx"
+            [ appendTest "Append straight line at bottom left of empty board" "" "yyyy" "yyyy"
             , appendTest "Append Z on bottom row of board with cells" """
-x----xx-xx-
-x---x-xx-x-
+r----oo-yg-
+r---b-pp-y-
 """ """
----xx------
---xx-------
+---rr------
+--rr-------
 """ """
-x--xxxx-xx-
-x-xxx-xx-x-
+r--rroo-yg-
+r-rrb-pp-y-
 """
             ]
         , describe "areCellsAvailable"
             [ areCellsAvailableTest "Empty board" "" "xxxx" True
             , areCellsAvailableTest "Straight line into available space on bottom row" """
-x----xx-xx-
-x----xxx-x-
-""" "-xxxx-----" True
+b----bb-yy-
+b----bbb-y-
+""" "-rrrr-----" True
             , areCellsAvailableTest "Straight line into unavailable space on bottom row" """
-x----xx-xx-
-x-x--xxx-x-
-""" "-xxxx-----" False
+b----bb-yy-
+b-r--bbb-y-
+""" "-yyyy-----" False
             , areCellsAvailableTest "Straight line into available space on third row" """
-x----x--xx-
-x----xx-xx-
-x-xxxxx-xx-
-x-xx-xxx-x-
+y----y--bb-
+r----oo-pp-
+b-oorry-pp-
+r-oy-bbb-p-
 """ """
--xxxx-----
+-rrrr-----
 ----------
 ----------
 """ True
             , areCellsAvailableTest "Straight line into unavailable space on third row" """
-x----x--xx-
-x--x-xx-xx-
-x-xxxxx-xx-
-x-xx-xxx-x-
+y----y--bb-
+r--r-oo-pp-
+b-oorry-pp-
+r-oy-bbb-p-
 """ """
--xxxx-----
+-rrrr-----
 ----------
 ----------
 """ False
@@ -68,24 +84,26 @@ x-xx-xxx-x-
         ]
 
 
-occupiedCellsTest : String -> String -> List Block.Coord -> Test
+occupiedCellsTest : String -> String -> List ( Block.Coord, BlockColour ) -> Test
 occupiedCellsTest testDescr asciiBoard expectedOccupiedCells =
-    -- TODO: this currently doesn't test colours - add this in
     test testDescr <|
         \_ ->
             buildBoard asciiBoard
                 |> Board.occupiedCells
-                |> List.map .coord
-                |> List.sort
-                |> Expect.equal (List.sort expectedOccupiedCells)
+                |> List.sortBy Tuple.first
+                |> Expect.equal (expectedOccupiedCells |> List.sortBy Tuple.first)
 
 
 areCellsAvailableTest : String -> String -> String -> Bool -> Test
 areCellsAvailableTest testDescr asciiBoard asciiShape expectedAvailable =
     test testDescr <|
         \_ ->
+            let
+                shapeCoords =
+                    AsciiGrid.build asciiShape AsciiGrid.blockColourConfig |> List.map Tuple.first
+            in
             buildBoard asciiBoard
-                |> (\board -> Board.areCellsAvailable board (AsciiGrid.build asciiShape))
+                |> (\board -> Board.areCellsAvailable board shapeCoords)
                 |> Expect.equal expectedAvailable
 
 
@@ -93,18 +111,17 @@ appendTest : String -> String -> String -> String -> Test
 appendTest testDescr orgBoard newBlocks expectedBoard =
     test testDescr <|
         \_ ->
-            Board.append (buildBoard orgBoard) Block.Blue (AsciiGrid.build newBlocks)
+            AsciiGrid.build newBlocks AsciiGrid.blockColourConfig
+                |> List.foldl (\( coord, colour ) board -> Board.append board colour [ coord ]) (buildBoard orgBoard)
                 |> Board.occupiedCells
-                |> List.map .coord
-                |> List.sort
-                |> Expect.equal (AsciiGrid.build expectedBoard)
+                |> List.sortBy Tuple.first
+                |> Expect.equal (buildBoard expectedBoard |> Board.occupiedCells |> List.sortBy Tuple.first)
 
 
 {-| Builds a board from the supplied ASCII grid. The supplied grid doesn't need to be the full 10x20: just whatever
-portion contains occupied cells. The colour is unimportant currently so hard-coded to use blue. This will probably
-change in future as colour-related tests are added.
+portion contains occupied cells.
 -}
 buildBoard : String -> Board
 buildBoard asciiBoard =
-    AsciiGrid.build asciiBoard
-        |> Board.append Board.emptyBoard Block.Blue
+    AsciiGrid.build asciiBoard AsciiGrid.blockColourConfig
+        |> List.foldl (\( coord, colour ) board -> Board.append board colour [ coord ]) Board.emptyBoard
