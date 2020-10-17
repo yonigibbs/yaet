@@ -60,7 +60,7 @@ and up the left of the grid, and coordinates indices are 0-based.
 -- test
 -- sadf
 
-import Block
+import Block exposing (BlockColour)
 
 
 {-| A shape currently in the process of dropping down the board.
@@ -72,7 +72,7 @@ type Shape
 {-| The data associated with a `Shape`.
 -}
 type alias ShapeData =
-    { gridSize : Int, blocks : List Block.Coord, colour : Block.Colour }
+    { gridSize : Int, blocks : List Block.Coord, colour : Block.BlockColour }
 
 
 type RotationDirection
@@ -90,7 +90,7 @@ data (Shape shapeData) =
 {-| A function which is used to generate a valid shape.
 -}
 type alias ShapeBuilder =
-    Block.Colour -> Shape
+    BlockColour -> Shape
 
 
 {-| A list of functions, each of which creates a different shape, of some given colour. This list contains the functions

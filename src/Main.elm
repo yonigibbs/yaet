@@ -1,9 +1,10 @@
 module Main exposing (main)
 
 import Array exposing (Array)
-import Block
+import Block exposing (BlockColour)
 import Browser
 import Game exposing (Game)
+import GameRender
 import Html exposing (Html)
 import Html.Events
 import Random
@@ -77,9 +78,9 @@ startNewGame =
 
 {-| All the possible colours, in an array so that one can be randomly chosen from it.
 -}
-allColours : Array Block.Colour
+allColours : Array BlockColour
 allColours =
-    Array.fromList [ Block.Blue, Block.Red, Block.Orange, Block.Yellow, Block.Purple ]
+    Array.fromList [ Block.Blue, Block.Red, Block.Orange, Block.Yellow, Block.Purple, Block.Green ]
 
 
 {-| Functions for generating each of the possible colours, in an array so that one can be randomly chosen from it.
@@ -93,7 +94,7 @@ allShapeBuilders =
     Array.fromList (first :: rest)
 
 
-generateRandomColour : Random.Generator Block.Colour
+generateRandomColour : Random.Generator BlockColour
 generateRandomColour =
     Random.int 0 (Array.length allColours - 1)
         |> Random.map (\index -> Array.get index allColours |> Maybe.withDefault Block.Blue)
@@ -127,7 +128,7 @@ view model =
             Html.text "TODO: Initialising"
 
         Playing game ->
-            Html.text "TODO: Game"
+            GameRender.render game
 
         Ended ->
             Html.text "TODO: Game ended"

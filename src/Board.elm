@@ -1,4 +1,4 @@
-module Board exposing (Board, OccupiedCell, append, areCellsAvailable, emptyBoard, occupiedCells, xSize, ySize)
+module Board exposing (Board, append, areCellsAvailable, emptyBoard, occupiedCells, xCellCount, yCellCount)
 
 {-| This module contains functionality related to representing a board. This is a 10x20 grid with cells, which can either
 be empty or have a block in them. Importantly, the board represents only _landed_ blocks: the shape which is currently
@@ -6,7 +6,7 @@ dropping (and which is rendered onto the grid represented by the board), is _not
 -}
 
 import Array exposing (Array)
-import Block
+import Block exposing (BlockColour)
 
 
 {-| Represents the board. This is a 10x20 grid with cells, which can either be empty or have a block in them.
@@ -21,7 +21,7 @@ type Board
 -}
 type Cell
     = Empty
-    | Occupied Block.Colour
+    | Occupied BlockColour
 
 
 {-| A row in the grid. An alias for an array of `Cell`s.
@@ -30,30 +30,28 @@ type alias Row =
     Array Cell
 
 
-{-| Represents a cell on the board, which has a block in it (i.e. is already occupied).
--}
-type alias OccupiedCell =
-    { coord : Block.Coord, colour : Block.Colour }
-
-
 emptyRow : Row
 emptyRow =
-    Array.repeat xSize Empty
+    Array.repeat xCellCount Empty
 
 
 {-| Gets the empty board to use at the start of the game.
 -}
 emptyBoard : Board
 emptyBoard =
-    Board <| Array.repeat ySize emptyRow
+    Board <| Array.repeat yCellCount emptyRow
 
 
 {-| Gets a list of all the occupied cells in the supplied board.
+
+Returns a list of tuples, where the first value in the tuple is the block's coordinates, and the second value is its
+colour.
+
 -}
-occupiedCells : Board -> List OccupiedCell
+occupiedCells : Board -> List ( Block.Coord, BlockColour )
 occupiedCells (Board board) =
     let
-        rowPopulatedCells : Int -> Row -> List OccupiedCell
+        rowPopulatedCells : Int -> Row -> List ( Block.Coord, BlockColour )
         rowPopulatedCells y row =
             row
                 |> Array.indexedMap
@@ -63,7 +61,7 @@ occupiedCells (Board board) =
                                 []
 
                             Occupied colour ->
-                                [ { coord = ( x, y ), colour = colour } ]
+                                [ ( ( x, y ), colour ) ]
                     )
                 |> Array.toList
                 |> List.concat
@@ -103,7 +101,7 @@ areCellsAvailable (Board board) coords =
 
 {-| Appends the supplied coordinates as occupied cells onto the supplied board.
 -}
-append : Board -> Block.Colour -> List Block.Coord -> Board
+append : Board -> BlockColour -> List Block.Coord -> Board
 append (Board board) colour coords =
     let
         appendCell : Block.Coord -> Array Row -> Array Row
@@ -122,11 +120,11 @@ append (Board board) colour coords =
 
 {-| The size of the grid along its x-axis, i.e. how wide the board is, counted in the number of cells.
 -}
-xSize =
+xCellCount =
     10
 
 
 {-| The size of the grid along its y-axis, i.e. how tall the board is, counted in the number of cells.
 -}
-ySize =
+yCellCount =
     20
