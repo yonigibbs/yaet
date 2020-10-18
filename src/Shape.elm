@@ -53,14 +53,12 @@ When this is rotated clockwise it becomes the following:
     +---+---+---+
 
 The data in the shape is simply the coordinates of the 4 cells which are filled. The x- and y-axes run along the bottom
-and up the left of the grid, and coordinates indices are 0-based.
+and up the left of the grid, and coordinates indexes are 0-based. The way the shapes are initially generated, is such
+that the top of the shape's grid should be at the top of board when that shape is first added to the game.
 
 -}
 
--- test
--- sadf
-
-import Block exposing (BlockColour)
+import Block
 
 
 {-| A shape currently in the process of dropping down the board.
@@ -72,9 +70,11 @@ type Shape
 {-| The data associated with a `Shape`.
 -}
 type alias ShapeData =
-    { gridSize : Int, blocks : List Block.Coord, colour : Block.BlockColour }
+    { gridSize : Int, blocks : List Block.Coord, colour : Block.Colour }
 
 
+{-| The direction in which a shape can be rotated.
+-}
 type RotationDirection
     = Clockwise
     | Anticlockwise
@@ -90,7 +90,7 @@ data (Shape shapeData) =
 {-| A function which is used to generate a valid shape.
 -}
 type alias ShapeBuilder =
-    BlockColour -> Shape
+    Block.Colour -> Shape
 
 
 {-| A list of functions, each of which creates a different shape, of some given colour. This list contains the functions

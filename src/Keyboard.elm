@@ -17,6 +17,8 @@ type Key
     | Other
 
 
+{-| A type mapping each key binding to a message to send when it occurs.
+-}
 type alias KeyMessages msg =
     { moveLeft : msg
     , moveRight : msg
@@ -26,6 +28,8 @@ type alias KeyMessages msg =
     }
 
 
+{-| Decodes a key event, succeeding if it's one of the special keys we handle (see `Key` type), otherwise failing.
+-}
 keyEventDecoder : KeyMessages msg -> JD.Decoder msg
 keyEventDecoder messages =
     keyDecoder
@@ -59,10 +63,6 @@ keyDecoder =
 
 toKey : String -> Key
 toKey keyString =
-    let
-        _ =
-            Debug.log "Key" keyString
-    in
     case keyString of
         "ArrowLeft" ->
             LeftArrow

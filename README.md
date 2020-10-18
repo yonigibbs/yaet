@@ -9,10 +9,10 @@ Current state: WIP.
 - [x] Timer to drop shapes
 - [x] Handle arrow keys to move shapes left/right/down
 - [x] Handle arrow keys to rotate pieces
-- [ ] Add arrow keys to drop piece immediately
+- [ ] Add key binding for dropping current piece immediately (space bar?)
 - [ ] When using down arrow to drop piece, if it lands, don't start dropping down next piece quickly
 - [x] Make lines disappear when one completed
-- [ ] More unit tests
+- [ ] Unit tests for the Game module
 - [ ] Calculate when game over
 - [ ] When rotating pieces, if rotation means one of the blocks goes off edge, move piece back into board?
 - [ ] Increase speed as lines disappear
@@ -26,4 +26,5 @@ Current state: WIP.
 - [ ] Settings/preferences, e.g. keyboard bindings (persisted to local storage)
 - [ ] Buttons to use instead of keyboard for phones/tablets?
 - [ ] Investigate "Hold" feature in some versions
+- [ ] Look into probabilities of shapes - should some shapes be more likely than others (e.g. straight line)?
 - [ ] TODOs in the code

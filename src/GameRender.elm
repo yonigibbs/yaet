@@ -4,7 +4,7 @@ module GameRender exposing (render)
 rendering technology can be swapped in later if required.
 -}
 
-import Block exposing (BlockColour)
+import Block
 import Board
 import Color exposing (Color)
 import Game exposing (Game)
@@ -71,7 +71,7 @@ gridLine x1 y1 x2 y2 =
 
 {-| Draws a block at the given coordinate, and of the given colour.
 -}
-drawBlock : Block.Coord -> BlockColour -> List (Svg msg)
+drawBlock : Block.Coord -> Block.Colour -> List (Svg msg)
 drawBlock coord blockColour =
     let
         ( x1, y1 ) =
@@ -86,7 +86,7 @@ drawBlock coord blockColour =
         , SvgA.y <| SvgT.px y1
         , SvgA.width <| SvgT.px innerSize
         , SvgA.height <| SvgT.px innerSize
-        , SvgA.fill <| SvgT.Paint <| Block.toLightColour blockColour
+        , SvgA.fill <| SvgT.Paint <| toLightColour blockColour
         ]
         []
     , -- A triangle of a slightly darker colour.
@@ -96,7 +96,7 @@ drawBlock coord blockColour =
             , ( x1 + innerSize, y1 )
             , ( x1, y1 + innerSize )
             ]
-        , SvgA.fill <| SvgT.Paint <| Block.toDarkColour blockColour
+        , SvgA.fill <| SvgT.Paint <| toDarkColour blockColour
         ]
         []
     ]
@@ -128,3 +128,47 @@ boardSizeX =
 boardSizeY : SvgT.Length
 boardSizeY =
     cellSize * toFloat Board.yCellCount |> SvgT.px
+
+
+toDarkColour : Block.Colour -> Color
+toDarkColour blockColour =
+    case blockColour of
+        Block.Blue ->
+            Color.darkBlue
+
+        Block.Red ->
+            Color.darkRed
+
+        Block.Orange ->
+            Color.darkOrange
+
+        Block.Yellow ->
+            Color.darkYellow
+
+        Block.Purple ->
+            Color.darkPurple
+
+        Block.Green ->
+            Color.darkGreen
+
+
+toLightColour : Block.Colour -> Color
+toLightColour blockColour =
+    case blockColour of
+        Block.Blue ->
+            Color.lightBlue
+
+        Block.Red ->
+            Color.lightRed
+
+        Block.Orange ->
+            Color.lightOrange
+
+        Block.Yellow ->
+            Color.lightYellow
+
+        Block.Purple ->
+            Color.lightPurple
+
+        Block.Green ->
+            Color.lightGreen

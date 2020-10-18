@@ -1,7 +1,7 @@
 module Main exposing (main)
 
 import Array exposing (Array)
-import Block exposing (BlockColour)
+import Block
 import Browser
 import Browser.Events
 import Game exposing (Game)
@@ -37,10 +37,10 @@ init _ =
 
 
 type Model
-    = Instructions
-    | Initialising
-    | Playing Game
-    | Ended
+    = Instructions -- No game being played - showing the user the instructions
+    | Initialising -- Game being initialised (random shapes being generated)
+    | Playing Game -- Game is currently being played
+    | Ended -- Game has ended (TODO: add data here for rendering end state of game?)
 
 
 
@@ -48,14 +48,16 @@ type Model
 
 
 type Msg
-    = StartGameRequested
-    | Initialised Game.InitialisationInfo
-    | RandomShapeGenerated Shape
-    | MoveShapeRequested Game.Direction
-    | RotateShapeRequested Shape.RotationDirection
-    | TimerDropDelayElapsed
+    = StartGameRequested -- User asked to start the game
+    | Initialised Game.InitialisationInfo -- Game has been initialised
+    | RandomShapeGenerated Shape -- Random shape was asked for (to add to the buffer) and is now ready
+    | MoveShapeRequested Game.MoveDirection -- User clicked arrow to move currently dropping shape in given direction
+    | RotateShapeRequested Shape.RotationDirection -- User pressed key to rotate currently droppiong shape in given direction
+    | TimerDropDelayElapsed -- Currently dropping shape should drop one row
 
 
+{-| Mapping of keyboard buttons to corresponding messages.
+-}
 keyMessages : Keyboard.KeyMessages Msg
 keyMessages =
     { moveLeft = MoveShapeRequested Game.Left
@@ -109,11 +111,16 @@ update msg model =
             ( model, Cmd.none )
 
 
+{-| Initialises the game - this involves generating the random shapes required by the game to start.
+-}
 initialiseGame : ( Model, Cmd Msg )
 initialiseGame =
     ( Initialising, Random.generate Initialised initialGameDataGenerator )
 
 
+{-| Handles the result of a movement in the game, namely updates the model with the new game and, if required, initiates
+the asynchronous generation of a new random shape (which is then added to the game's model later).
+-}
 handleMovement : ( Game, Bool ) -> ( Model, Cmd Msg )
 handleMovement ( nextGame, needNewRandomShape ) =
     let
@@ -127,9 +134,13 @@ handleMovement ( nextGame, needNewRandomShape ) =
     ( Playing nextGame, nextCmd )
 
 
+
+-- RANDOM SHAPE GENERATION
+
+
 {-| All the possible colours, in an array so that one can be randomly chosen from it.
 -}
-allColours : Array BlockColour
+allColours : Array Block.Colour
 allColours =
     Array.fromList [ Block.Blue, Block.Red, Block.Orange, Block.Yellow, Block.Purple, Block.Green ]
 
@@ -145,7 +156,7 @@ allShapeBuilders =
     Array.fromList (first :: rest)
 
 
-randomColourGenerator : Random.Generator BlockColour
+randomColourGenerator : Random.Generator Block.Colour
 randomColourGenerator =
     Random.int 0 (Array.length allColours - 1)
         |> Random.map (\index -> Array.get index allColours |> Maybe.withDefault Block.Blue)
@@ -157,12 +168,18 @@ randomShapeBuilderGenerator =
         |> Random.map (\index -> Array.get index allShapeBuilders |> Maybe.withDefault (Tuple.first Shape.builders))
 
 
+{-| Generator of random shapes. Requires a random colour and a random `ShapeBuilder` function. The latter is called,
+receiving the result of the former, to eventually get a `Shape`.
+-}
 randomShapeGenerator : Random.Generator Shape
 randomShapeGenerator =
     Random.pair randomColourGenerator randomShapeBuilderGenerator
         |> Random.map (\( colour, shapeBuilder ) -> shapeBuilder colour)
 
 
+{-| Generator of a list of random shapes (of length 5). See the `Game` module's comments for details of the random shape
+buffer.
+-}
 shapeBufferGenerator : Random.Generator (List Shape)
 shapeBufferGenerator =
     Random.map5
@@ -174,6 +191,8 @@ shapeBufferGenerator =
         randomShapeGenerator
 
 
+{-| Generator of the random data required to start a new game.
+-}
 initialGameDataGenerator : Random.Generator Game.InitialisationInfo
 initialGameDataGenerator =
     Random.map3 Game.InitialisationInfo randomShapeGenerator randomShapeGenerator shapeBufferGenerator

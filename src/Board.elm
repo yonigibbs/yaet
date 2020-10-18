@@ -15,7 +15,7 @@ dropping (and which is rendered onto the grid represented by the board), is _not
 -}
 
 import Array exposing (Array)
-import Block exposing (BlockColour)
+import Block
 
 
 {-| Represents the board. This is a 10x20 grid with cells, which can either be empty or have a block in them.
@@ -30,7 +30,7 @@ type Board
 -}
 type Cell
     = Empty
-    | Occupied BlockColour
+    | Occupied Block.Colour
 
 
 {-| A row in the grid. An alias for an array of `Cell`s.
@@ -57,10 +57,10 @@ Returns a list of tuples, where the first value in the tuple is the block's coor
 colour.
 
 -}
-occupiedCells : Board -> List ( Block.Coord, BlockColour )
+occupiedCells : Board -> List ( Block.Coord, Block.Colour )
 occupiedCells (Board board) =
     let
-        rowPopulatedCells : Int -> Row -> List ( Block.Coord, BlockColour )
+        rowPopulatedCells : Int -> Row -> List ( Block.Coord, Block.Colour )
         rowPopulatedCells y row =
             row
                 |> Array.indexedMap
@@ -146,13 +146,13 @@ completedRows rows =
 {-| Removes the lines at the supplied indexes (adding new empty
 -}
 removeRows : Array Row -> List Int -> Array Row
-removeRows rows indices =
+removeRows rows indexes =
     let
         keptRows =
             Array.toIndexedList rows
                 |> List.filterMap
                     (\( index, row ) ->
-                        if not <| List.member index indices then
+                        if not <| List.member index indexes then
                             Just row
 
                         else
@@ -161,7 +161,7 @@ removeRows rows indices =
                 |> Array.fromList
 
         newEmptyRows =
-            Array.repeat (List.length indices) emptyRow
+            Array.repeat (List.length indexes) emptyRow
     in
     Array.append keptRows newEmptyRows
 
@@ -169,7 +169,7 @@ removeRows rows indices =
 {-| Appends the supplied coordinates as occupied cells onto the supplied board. Note that this doesn't automatically
 removed any newly completed lines.
 -}
-append : Board -> BlockColour -> List Block.Coord -> Board
+append : Board -> Block.Colour -> List Block.Coord -> Board
 append (Board board) colour coords =
     let
         appendCell : Block.Coord -> Array Row -> Array Row

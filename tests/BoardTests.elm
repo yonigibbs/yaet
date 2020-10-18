@@ -5,9 +5,8 @@ way. Instead, we start off with an empty board, then build it up by appending ce
 -}
 
 import AsciiGrid
-import Block exposing (BlockColour)
+import Block
 import Board exposing (Board)
-import Dict
 import Expect
 import Test exposing (Test, describe, test)
 
@@ -84,7 +83,7 @@ r-oy-bbb-p-
         ]
 
 
-occupiedCellsTest : String -> String -> List ( Block.Coord, BlockColour ) -> Test
+occupiedCellsTest : String -> String -> List ( Block.Coord, Block.Colour ) -> Test
 occupiedCellsTest testDescr asciiBoard expectedOccupiedCells =
     test testDescr <|
         \_ ->
