@@ -91,7 +91,7 @@ update msg model =
             ( model, Cmd.none )
 
         ( Playing game, MoveShapeRequested direction ) ->
-            ( Playing <| Game.moveShape game direction, Cmd.none )
+            Game.moveShape direction game |> handleMovement
 
         ( _, MoveShapeRequested _ ) ->
             ( model, Cmd.none )
@@ -103,18 +103,7 @@ update msg model =
             ( model, Cmd.none )
 
         ( Playing game, TimerDropDelayElapsed ) ->
-            let
-                ( nextGame, needNewRandomShape ) =
-                    Game.timerDrop game
-
-                nextCmd =
-                    if needNewRandomShape then
-                        generateRandomShape
-
-                    else
-                        Cmd.none
-            in
-            ( Playing nextGame, nextCmd )
+            Game.timerDrop game |> handleMovement
 
         ( _, TimerDropDelayElapsed ) ->
             ( model, Cmd.none )
@@ -123,6 +112,19 @@ update msg model =
 initialiseGame : ( Model, Cmd Msg )
 initialiseGame =
     ( Initialising, Random.generate Initialised initialGameDataGenerator )
+
+
+handleMovement : ( Game, Bool ) -> ( Model, Cmd Msg )
+handleMovement ( nextGame, needNewRandomShape ) =
+    let
+        nextCmd =
+            if needNewRandomShape then
+                generateRandomShape
+
+            else
+                Cmd.none
+    in
+    ( Playing nextGame, nextCmd )
 
 
 {-| All the possible colours, in an array so that one can be randomly chosen from it.
@@ -174,7 +176,7 @@ shapeBufferGenerator =
 
 initialGameDataGenerator : Random.Generator Game.InitialisationInfo
 initialGameDataGenerator =
-    Random.map4 Game.InitialisationInfo randomShapeGenerator randomShapeGenerator randomShapeGenerator shapeBufferGenerator
+    Random.map3 Game.InitialisationInfo randomShapeGenerator randomShapeGenerator shapeBufferGenerator
 
 
 generateRandomShape : Cmd Msg

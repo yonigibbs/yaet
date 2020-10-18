@@ -34,7 +34,6 @@ type alias Model =
     { board : Board
     , droppingShape : DroppingShape
     , nextShape : Shape
-    , subsequentShape : Shape
     , timerDropDelay : Int
     , shapeBuffer : List Shape
     }
@@ -54,18 +53,17 @@ defaultInitialDropDelay =
 
 
 type alias InitialisationInfo =
-    { initialShape : Shape, nextShape : Shape, subsequentShape : Shape, shapeBuffer : List Shape }
+    { initialShape : Shape, nextShape : Shape, shapeBuffer : List Shape }
 
 
 {-| Starts a new game with the supplied shape as the initially dropping shape.
 -}
 new : InitialisationInfo -> Game
-new { initialShape, nextShape, subsequentShape, shapeBuffer } =
+new { initialShape, nextShape, shapeBuffer } =
     Game
         { board = Board.emptyBoard
         , droppingShape = initDroppingShape initialShape
         , nextShape = nextShape
-        , subsequentShape = subsequentShape
         , timerDropDelay = defaultInitialDropDelay
         , shapeBuffer = shapeBuffer
         }
@@ -88,45 +86,60 @@ timerDrop ((Game ({ droppingShape } as model)) as game) =
         ( Game { model | droppingShape = proposedDroppingShape }, False )
 
     else
-        -- It's not valid for the currently dropping shape to go down by one row, so append its blocks to the
-        -- game's board, and request a new shape. We can only do this we have a shape in the buffer.
-        case model.shapeBuffer of
-            firstInBuffer :: restOfBuffer ->
-                -- We have one, so we can use it:
-                let
-                    { colour } =
-                        Shape.data droppingShape.shape
-
-                    nextBoard =
-                        Board.append model.board colour (calcShapeBlocksBoardCoords droppingShape)
-                in
-                ( Game
-                    { model
-                        | board = nextBoard
-                        , droppingShape = initDroppingShape model.nextShape
-                        , nextShape = model.subsequentShape
-                        , subsequentShape = firstInBuffer
-                        , shapeBuffer = restOfBuffer
-                    }
-                , True
-                )
-
-            _ ->
-                -- Nothing in the buffer so we can't accept this
-                ( game, False )
+        -- It's not valid for the currently dropping shape to go down by one row, so it must have landed.
+        handleDroppingShapeLanded game
 
 
-moveShape : Game -> Direction -> Game
-moveShape ((Game ({ droppingShape } as model)) as game) direction =
+moveShape : Direction -> Game -> ( Game, Bool )
+moveShape direction ((Game ({ droppingShape } as model)) as game) =
     let
         proposedDroppingShape =
             { droppingShape | coord = nextCoord direction droppingShape.coord }
     in
-    if isValidPosition model.board proposedDroppingShape then
-        Game { model | droppingShape = proposedDroppingShape }
+    case ( isValidPosition model.board proposedDroppingShape, direction ) of
+        ( True, _ ) ->
+            ( Game { model | droppingShape = proposedDroppingShape }, False )
 
-    else
-        game
+        ( False, Down ) ->
+            handleDroppingShapeLanded game
+
+        ( False, _ ) ->
+            ( game, False )
+
+
+{-| Handles the case when the dropping shape has landed: appends its blocks to the board and takes the next item off the
+buffer to be the new "next" shape.
+-}
+handleDroppingShapeLanded : Game -> ( Game, Bool )
+handleDroppingShapeLanded ((Game model) as game) =
+    -- We can only do this we have a shape in the buffer, as we need to take a shape out the buffer and make it the new
+    -- "next" shape.
+    case model.shapeBuffer of
+        firstInBuffer :: restOfBuffer ->
+            -- We have one, so we can use it:
+            let
+                { colour } =
+                    Shape.data model.droppingShape.shape
+
+                -- TODO: don't immediately remove completed rows as currently implemented - add some sort of quick
+                -- animation (fading? flashing?) to show the ones being removed.
+                ( nextBoard, _ ) =
+                    Board.append model.board colour (calcShapeBlocksBoardCoords model.droppingShape)
+                        |> Board.removeCompletedRows
+            in
+            ( Game
+                { model
+                    | board = nextBoard
+                    , droppingShape = initDroppingShape model.nextShape
+                    , nextShape = firstInBuffer
+                    , shapeBuffer = restOfBuffer
+                }
+            , True
+            )
+
+        _ ->
+            -- Nothing in the buffer so we can't accept this
+            ( game, False )
 
 
 rotateShape : Game -> Shape.RotationDirection -> Game
