@@ -106,7 +106,7 @@ drawBlock coord blockColour =
 -}
 coordToGridPos : Block.Coord -> ( Float, Float )
 coordToGridPos ( x, y ) =
-    ( toFloat x * cellSize, Board.yCellCount - y |> toFloat |> (*) cellSize )
+    ( toFloat x * cellSize, Board.yCellCount - y - 1 |> toFloat |> (*) cellSize )
 
 
 {-| The width and height of each cell, in pixels.

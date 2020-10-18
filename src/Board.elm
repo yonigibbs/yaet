@@ -82,7 +82,7 @@ isEmptyCell cell =
             False
 
 
-{-| Checks whether all the supplied coordinates are free on the supplied board.
+{-| Checks whether all the supplied coordinates are free on the supplied board (and within its legal coordinates).
 -}
 areCellsAvailable : Board -> List Block.Coord -> Bool
 areCellsAvailable (Board board) coords =
@@ -96,7 +96,7 @@ areCellsAvailable (Board board) coords =
     in
     -- TODO: If there are multiple cells in the same row, this will get that row from the board's array multiple times:
     -- this could be optimised. Might increase code complexity, and optimisation will probably be negligible. Investigate.
-    List.all isCellFree coords
+    List.all (\( x, y ) -> x >= 0 && x < xCellCount && y >= 0 && y < yCellCount && isCellFree ( x, y )) coords
 
 
 {-| Appends the supplied coordinates as occupied cells onto the supplied board.

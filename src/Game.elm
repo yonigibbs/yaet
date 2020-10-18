@@ -1,4 +1,4 @@
-module Game exposing (Game, blocks, new, nextShapeGenerated)
+module Game exposing (Direction(..), Game, InitialisationInfo, blocks, moveShape, new, rotateShape, shapeGenerated, timerDrop, timerDropDelay)
 
 {-| This module controls the game currently being played. It's responsible for moving the dropping shape, adding a new
 dropping shape when it's landed, etc. It doesn't actually subscribe to timer/keyboard events etc. - instead, it exposes
@@ -14,32 +14,36 @@ import Board exposing (Board)
 import Shape exposing (Shape)
 
 
-{-| The state of the dropping shape. When `Initialising`, we are waiting for a random shape to be generated; when
-`Dropping` the shape is currently dropping.
+{-| The currently dropping shape, namely the `Shape` itself, and its coordinates. The latter are the coordinates on the
+board of the bottom left corner of the grid which contains the shape (see comments on the `Shape` module itself for more
+info).
 -}
-type DroppingShape
-    = Initialising
-    | Dropping DroppingShapeInfo
-
-
-{-| Data about the currently dropping shape, namely the `Shape` itself, and its coordinates. The latter are the
-coordinates on the board of the bottom left corner of the grid which contains the shape (see comments on the `Shape`
-module itself for more info).
--}
-type alias DroppingShapeInfo =
+type alias DroppingShape =
     { shape : Shape, coord : Block.Coord }
 
 
 {-| A game in the process of being played.
 -}
 type Game
-    = Game GameInfo
+    = Game Model
 
 
 {-| Information about the currently playing game.
 -}
-type alias GameInfo =
-    { board : Board, droppingShape : DroppingShape, nextTimerDropDelay : Int }
+type alias Model =
+    { board : Board
+    , droppingShape : DroppingShape
+    , nextShape : Shape
+    , subsequentShape : Shape
+    , timerDropDelay : Int
+    , shapeBuffer : List Shape
+    }
+
+
+type Direction
+    = Down
+    | Left
+    | Right
 
 
 {-| The default period to wait before the next timer drop kicks in (i.e. the dropping shape is dropped one more row in
@@ -49,15 +53,113 @@ defaultInitialDropDelay =
     1000
 
 
+type alias InitialisationInfo =
+    { initialShape : Shape, nextShape : Shape, subsequentShape : Shape, shapeBuffer : List Shape }
+
+
 {-| Starts a new game with the supplied shape as the initially dropping shape.
 -}
-new : Shape -> Game
-new shape =
+new : InitialisationInfo -> Game
+new { initialShape, nextShape, subsequentShape, shapeBuffer } =
     Game
         { board = Board.emptyBoard
-        , droppingShape = Dropping { shape = shape, coord = calcInitialBoardCoord shape }
-        , nextTimerDropDelay = defaultInitialDropDelay
+        , droppingShape = initDroppingShape initialShape
+        , nextShape = nextShape
+        , subsequentShape = subsequentShape
+        , timerDropDelay = defaultInitialDropDelay
+        , shapeBuffer = shapeBuffer
         }
+
+
+initDroppingShape : Shape -> DroppingShape
+initDroppingShape shape =
+    { shape = shape, coord = calcInitialBoardCoord shape }
+
+
+timerDrop : Game -> ( Game, Bool )
+timerDrop ((Game ({ droppingShape } as model)) as game) =
+    let
+        proposedDroppingShape =
+            { droppingShape | coord = nextCoord Down droppingShape.coord }
+    in
+    if isValidPosition model.board proposedDroppingShape then
+        -- It's valid for the currently dropping shape to go down by one row, so just do that. No need to ask for a new
+        -- shape to add to the buffer just now as we aren't yet using up the currently dropping one.
+        ( Game { model | droppingShape = proposedDroppingShape }, False )
+
+    else
+        -- It's not valid for the currently dropping shape to go down by one row, so append its blocks to the
+        -- game's board, and request a new shape. We can only do this we have a shape in the buffer.
+        case model.shapeBuffer of
+            firstInBuffer :: restOfBuffer ->
+                -- We have one, so we can use it:
+                let
+                    { colour } =
+                        Shape.data droppingShape.shape
+
+                    nextBoard =
+                        Board.append model.board colour (calcShapeBlocksBoardCoords droppingShape)
+                in
+                ( Game
+                    { model
+                        | board = nextBoard
+                        , droppingShape = initDroppingShape model.nextShape
+                        , nextShape = model.subsequentShape
+                        , subsequentShape = firstInBuffer
+                        , shapeBuffer = restOfBuffer
+                    }
+                , True
+                )
+
+            _ ->
+                -- Nothing in the buffer so we can't accept this
+                ( game, False )
+
+
+moveShape : Game -> Direction -> Game
+moveShape ((Game ({ droppingShape } as model)) as game) direction =
+    let
+        proposedDroppingShape =
+            { droppingShape | coord = nextCoord direction droppingShape.coord }
+    in
+    if isValidPosition model.board proposedDroppingShape then
+        Game { model | droppingShape = proposedDroppingShape }
+
+    else
+        game
+
+
+rotateShape : Game -> Shape.RotationDirection -> Game
+rotateShape ((Game ({ droppingShape } as model)) as game) direction =
+    let
+        proposedDroppingShape =
+            { droppingShape | shape = Shape.rotate direction droppingShape.shape }
+    in
+    if isValidPosition model.board proposedDroppingShape then
+        Game { model | droppingShape = proposedDroppingShape }
+
+    else
+        game
+
+
+nextCoord : Direction -> Block.Coord -> Block.Coord
+nextCoord direction ( x, y ) =
+    case direction of
+        Down ->
+            ( x, y - 1 )
+
+        Left ->
+            ( x - 1, y )
+
+        Right ->
+            ( x + 1, y )
+
+
+{-| Calculates whether the supplied dropping shape is valid to be at its specified coordinates, for the given board.
+-}
+isValidPosition : Board -> DroppingShape -> Bool
+isValidPosition board droppingShape =
+    calcShapeBlocksBoardCoords droppingShape |> Board.areCellsAvailable board
 
 
 {-| Gets all the blocks that are currently in the game, including landed blocks and ones that are part of the dropping
@@ -70,38 +172,32 @@ colour.
 blocks : Game -> List ( Block.Coord, BlockColour )
 blocks (Game game) =
     let
-        droppingShapeBlocks =
-            case game.droppingShape of
-                Dropping droppingShapeInfo ->
-                    let
-                        { colour } =
-                            Shape.data droppingShapeInfo.shape
-                    in
-                    calcShapeBlocksBoardCoords droppingShapeInfo |> List.map (\coord -> ( coord, colour ))
+        { colour } =
+            Shape.data game.droppingShape.shape
 
-                Initialising ->
-                    []
+        droppingShapeBlocks =
+            calcShapeBlocksBoardCoords game.droppingShape |> List.map (\coord -> ( coord, colour ))
     in
     Board.occupiedCells game.board ++ droppingShapeBlocks
 
 
-{-| Called when the next random shape has been generated and is ready to add to the game.
+{-| Called when a random shape has been generated and is ready to add to the buffer.
 -}
-nextShapeGenerated : Game -> Shape -> Game
-nextShapeGenerated game shape =
-    Debug.todo "Implement nextShapeGenerated"
+shapeGenerated : Game -> Shape -> Game
+shapeGenerated (Game model) shape =
+    Game { model | shapeBuffer = model.shapeBuffer ++ [ shape ] }
 
 
 {-| Calculates the coordinates of the blocks of the supplied dropping shape on board. The dropping shape's blocks'
 coordinates are relative to the coordinates of the shape itself.
 -}
-calcShapeBlocksBoardCoords : DroppingShapeInfo -> List Block.Coord
-calcShapeBlocksBoardCoords droppingShapeInfo =
+calcShapeBlocksBoardCoords : DroppingShape -> List Block.Coord
+calcShapeBlocksBoardCoords droppingShape =
     let
         ( shapeX, shapeY ) =
-            droppingShapeInfo.coord
+            droppingShape.coord
     in
-    Shape.data droppingShapeInfo.shape
+    Shape.data droppingShape.shape
         |> .blocks
         |> List.map (\( x, y ) -> ( x + shapeX, y + shapeY ))
 
@@ -118,6 +214,11 @@ calcInitialBoardCoord shape =
             ((toFloat Board.xCellCount / 2) - (toFloat shapeGridSize / 2)) |> floor
 
         y =
-            Board.yCellCount - shapeGridSize + 1
+            Board.yCellCount - shapeGridSize
     in
     ( x, y )
+
+
+timerDropDelay : Game -> Int
+timerDropDelay (Game model) =
+    model.timerDropDelay

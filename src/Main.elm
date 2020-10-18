@@ -3,12 +3,15 @@ module Main exposing (main)
 import Array exposing (Array)
 import Block exposing (BlockColour)
 import Browser
+import Browser.Events
 import Game exposing (Game)
 import GameRender
 import Html exposing (Html)
 import Html.Events
+import Keyboard
 import Random
 import Shape exposing (Shape)
+import Time
 
 
 
@@ -46,34 +49,80 @@ type Model
 
 type Msg
     = StartGameRequested
-    | NextShapeGenerated Shape
+    | Initialised Game.InitialisationInfo
+    | RandomShapeGenerated Shape
+    | MoveShapeRequested Game.Direction
+    | RotateShapeRequested Shape.RotationDirection
+    | TimerDropDelayElapsed
+
+
+keyMessages : Keyboard.KeyMessages Msg
+keyMessages =
+    { moveLeft = MoveShapeRequested Game.Left
+    , moveRight = MoveShapeRequested Game.Right
+    , dropOneRow = MoveShapeRequested Game.Down
+    , rotateClockwise = RotateShapeRequested Shape.Clockwise
+    , rotateAnticlockwise = RotateShapeRequested Shape.Anticlockwise
+    }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model, msg ) of
         ( Instructions, StartGameRequested ) ->
-            startNewGame
+            initialiseGame
 
         ( Ended, StartGameRequested ) ->
-            startNewGame
+            initialiseGame
 
         ( _, StartGameRequested ) ->
             ( model, Cmd.none )
 
-        ( Initialising, NextShapeGenerated shape ) ->
-            ( Playing <| Game.new shape, Cmd.none )
+        ( Initialising, Initialised initialisationInfo ) ->
+            ( Playing <| Game.new initialisationInfo, Cmd.none )
 
-        ( Playing game, NextShapeGenerated shape ) ->
-            ( Playing <| Game.nextShapeGenerated game shape, Cmd.none )
+        ( _, Initialised _ ) ->
+            ( model, Cmd.none )
 
-        ( _, NextShapeGenerated _ ) ->
+        ( Playing game, RandomShapeGenerated shape ) ->
+            ( Playing <| Game.shapeGenerated game shape, Cmd.none )
+
+        ( _, RandomShapeGenerated _ ) ->
+            ( model, Cmd.none )
+
+        ( Playing game, MoveShapeRequested direction ) ->
+            ( Playing <| Game.moveShape game direction, Cmd.none )
+
+        ( _, MoveShapeRequested _ ) ->
+            ( model, Cmd.none )
+
+        ( Playing game, RotateShapeRequested direction ) ->
+            ( Playing <| Game.rotateShape game direction, Cmd.none )
+
+        ( _, RotateShapeRequested _ ) ->
+            ( model, Cmd.none )
+
+        ( Playing game, TimerDropDelayElapsed ) ->
+            let
+                ( nextGame, needNewRandomShape ) =
+                    Game.timerDrop game
+
+                nextCmd =
+                    if needNewRandomShape then
+                        generateRandomShape
+
+                    else
+                        Cmd.none
+            in
+            ( Playing nextGame, nextCmd )
+
+        ( _, TimerDropDelayElapsed ) ->
             ( model, Cmd.none )
 
 
-startNewGame : ( Model, Cmd Msg )
-startNewGame =
-    ( Initialising, Random.generate NextShapeGenerated generateRandomShape )
+initialiseGame : ( Model, Cmd Msg )
+initialiseGame =
+    ( Initialising, Random.generate Initialised initialGameDataGenerator )
 
 
 {-| All the possible colours, in an array so that one can be randomly chosen from it.
@@ -94,24 +143,43 @@ allShapeBuilders =
     Array.fromList (first :: rest)
 
 
-generateRandomColour : Random.Generator BlockColour
-generateRandomColour =
+randomColourGenerator : Random.Generator BlockColour
+randomColourGenerator =
     Random.int 0 (Array.length allColours - 1)
         |> Random.map (\index -> Array.get index allColours |> Maybe.withDefault Block.Blue)
 
 
-generateRandomShapeBuilder : Random.Generator Shape.ShapeBuilder
-generateRandomShapeBuilder =
+randomShapeBuilderGenerator : Random.Generator Shape.ShapeBuilder
+randomShapeBuilderGenerator =
     Random.int 0 (Array.length allShapeBuilders - 1)
         |> Random.map (\index -> Array.get index allShapeBuilders |> Maybe.withDefault (Tuple.first Shape.builders))
 
 
-{-| Generates the next random shape.
--}
-generateRandomShape : Random.Generator Shape
-generateRandomShape =
-    Random.pair generateRandomColour generateRandomShapeBuilder
+randomShapeGenerator : Random.Generator Shape
+randomShapeGenerator =
+    Random.pair randomColourGenerator randomShapeBuilderGenerator
         |> Random.map (\( colour, shapeBuilder ) -> shapeBuilder colour)
+
+
+shapeBufferGenerator : Random.Generator (List Shape)
+shapeBufferGenerator =
+    Random.map5
+        (\s1 s2 s3 s4 s5 -> [ s1, s2, s3, s4, s5 ])
+        randomShapeGenerator
+        randomShapeGenerator
+        randomShapeGenerator
+        randomShapeGenerator
+        randomShapeGenerator
+
+
+initialGameDataGenerator : Random.Generator Game.InitialisationInfo
+initialGameDataGenerator =
+    Random.map4 Game.InitialisationInfo randomShapeGenerator randomShapeGenerator randomShapeGenerator shapeBufferGenerator
+
+
+generateRandomShape : Cmd Msg
+generateRandomShape =
+    Random.generate RandomShapeGenerated randomShapeGenerator
 
 
 
@@ -140,4 +208,18 @@ view model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.none
+    case model of
+        Instructions ->
+            Sub.none
+
+        Initialising ->
+            Sub.none
+
+        Playing game ->
+            Sub.batch
+                [ Time.every (Game.timerDropDelay game |> toFloat) <| always TimerDropDelayElapsed
+                , Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
+                ]
+
+        Ended ->
+            Sub.none
