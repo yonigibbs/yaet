@@ -39,8 +39,16 @@ init _ =
 type Model
     = Instructions -- No game being played - showing the user the instructions
     | Initialising -- Game being initialised (random shapes being generated)
-    | Playing Game -- Game is currently being played
+    | Playing PlayingModel -- Game is currently being played
     | Ended -- Game has ended (TODO: add data here for rendering end state of game?)
+
+
+type alias BlinkAnimationInfo =
+    { requestedAnimation : Game.BlinkAnimation, startTime : Time.Posix }
+
+
+type alias PlayingModel =
+    { game : Game, blinkAnimationInfo : Maybe BlinkAnimationInfo }
 
 
 
@@ -81,31 +89,31 @@ update msg model =
             ( model, Cmd.none )
 
         ( Initialising, Initialised initialisationInfo ) ->
-            ( Playing <| Game.new initialisationInfo, Cmd.none )
+            ( Playing { game = Game.new initialisationInfo, blinkAnimationInfo = Nothing }, Cmd.none )
 
         ( _, Initialised _ ) ->
             ( model, Cmd.none )
 
-        ( Playing game, RandomShapeGenerated shape ) ->
-            ( Playing <| Game.shapeGenerated game shape, Cmd.none )
+        ( Playing playingModel, RandomShapeGenerated shape ) ->
+            ( Playing { playingModel | game = Game.shapeGenerated playingModel.game shape }, Cmd.none )
 
         ( _, RandomShapeGenerated _ ) ->
             ( model, Cmd.none )
 
-        ( Playing game, MoveShapeRequested direction ) ->
-            Game.moveShape direction game |> handleMovement
+        ( Playing playingModel, MoveShapeRequested direction ) ->
+            Game.moveShape direction playingModel.game |> handleMoveResult playingModel
 
         ( _, MoveShapeRequested _ ) ->
             ( model, Cmd.none )
 
-        ( Playing game, RotateShapeRequested direction ) ->
-            ( Playing <| Game.rotateShape game direction, Cmd.none )
+        ( Playing playingModel, RotateShapeRequested direction ) ->
+            Game.rotateShape playingModel.game direction |> handleMoveResult playingModel
 
         ( _, RotateShapeRequested _ ) ->
             ( model, Cmd.none )
 
-        ( Playing game, TimerDropDelayElapsed ) ->
-            Game.timerDrop game |> handleMovement
+        ( Playing playingModel, TimerDropDelayElapsed ) ->
+            Game.timerDrop playingModel.game |> handleMoveResult playingModel
 
         ( _, TimerDropDelayElapsed ) ->
             ( model, Cmd.none )
@@ -121,17 +129,22 @@ initialiseGame =
 {-| Handles the result of a movement in the game, namely updates the model with the new game and, if required, initiates
 the asynchronous generation of a new random shape (which is then added to the game's model later).
 -}
-handleMovement : ( Game, Bool ) -> ( Model, Cmd Msg )
-handleMovement ( nextGame, needNewRandomShape ) =
-    let
-        nextCmd =
-            if needNewRandomShape then
-                generateRandomShape
+handleMoveResult : PlayingModel -> Game.MoveResult -> ( Model, Cmd Msg )
+handleMoveResult currentPlayingModel moveResult =
+    case moveResult of
+        Game.Continue { game, newShapeRequested, blinkAnimation } ->
+            let
+                nextCmd =
+                    if newShapeRequested then
+                        generateRandomShape
 
-            else
-                Cmd.none
-    in
-    ( Playing nextGame, nextCmd )
+                    else
+                        Cmd.none
+            in
+            ( Playing { currentPlayingModel | game = game }, nextCmd )
+
+        Game.EndGame ->
+            Debug.todo "Implement game end"
 
 
 
@@ -216,7 +229,7 @@ view model =
         Initialising ->
             Html.text "TODO: Initialising"
 
-        Playing game ->
+        Playing { game } ->
             GameRender.render game
 
         Ended ->
@@ -236,7 +249,7 @@ subscriptions model =
         Initialising ->
             Sub.none
 
-        Playing game ->
+        Playing { game } ->
             Sub.batch
                 [ Time.every (Game.timerDropDelay game |> toFloat) <| always TimerDropDelayElapsed
                 , Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
