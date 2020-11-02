@@ -11,6 +11,7 @@ import Html.Events
 import Keyboard
 import Random
 import Shape exposing (Shape)
+import Task
 import Time
 
 
@@ -43,12 +44,14 @@ type Model
     | Ended -- Game has ended (TODO: add data here for rendering end state of game?)
 
 
-type alias BlinkAnimationInfo =
-    { requestedAnimation : Game.BlinkAnimation, startTime : Time.Posix }
+type HighlightAnimation
+    = NoHighlightAnimation
+    | HighlightAnimationPending { info : Game.HighlightedBlockInfo }
+    | HighlightAnimationInProgress { info : Game.HighlightedBlockInfo, start : Time.Posix }
 
 
 type alias PlayingModel =
-    { game : Game, blinkAnimationInfo : Maybe BlinkAnimationInfo }
+    { game : Game, normalBlocks : List ( Block.Coord, Block.Colour ), highlightAnimation : HighlightAnimation }
 
 
 
@@ -62,6 +65,11 @@ type Msg
     | MoveShapeRequested Game.MoveDirection -- User clicked arrow to move currently dropping shape in given direction
     | RotateShapeRequested Shape.RotationDirection -- User pressed key to rotate currently droppiong shape in given direction
     | TimerDropDelayElapsed -- Currently dropping shape should drop one row
+    | NewAnimationRequested { highlightInfo : Game.HighlightedBlockInfo, start : Time.Posix }
+
+
+
+-- New highlighting animation ready to start (as we have current time)
 
 
 {-| Mapping of keyboard buttons to corresponding messages.
@@ -89,7 +97,7 @@ update msg model =
             ( model, Cmd.none )
 
         ( Initialising, Initialised initialisationInfo ) ->
-            ( Playing { game = Game.new initialisationInfo, blinkAnimationInfo = Nothing }, Cmd.none )
+            ( Playing { game = Game.new initialisationInfo, normalBlocks = [], highlightAnimation = Nothing }, Cmd.none )
 
         ( _, Initialised _ ) ->
             ( model, Cmd.none )
@@ -118,6 +126,28 @@ update msg model =
         ( _, TimerDropDelayElapsed ) ->
             ( model, Cmd.none )
 
+        ( Playing playingModel, NewAnimationRequested request ) ->
+            -- TODO: put in separate function
+            case playingModel.highlightAnimation of
+                HighlightAnimationPending pendingAnimation ->
+                    if isSameHighlightInfo request.highlightInfo pendingAnimation.info then
+                        ( Playing
+                            { playingModel
+                                | highlightAnimation =
+                                    HighlightAnimationInProgress { info = request.highlightInfo, start = request.start }
+                            }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        ( _, NewAnimationRequested _ ) ->
+            ( model, Cmd.none )
+
 
 {-| Initialises the game - this involves generating the random shapes required by the game to start.
 -}
@@ -126,22 +156,69 @@ initialiseGame =
     ( Initialising, Random.generate Initialised initialGameDataGenerator )
 
 
+isSameHighlightInfo : Game.HighlightedBlockInfo -> Game.HighlightedBlockInfo -> Bool
+isSameHighlightInfo info1 info2 =
+    info1.highlightType
+        == info2.highlightType
+        && List.sortBy Tuple.first info1.blocks
+        == List.sortBy Tuple.first info2.blocks
+
+
 {-| Handles the result of a movement in the game, namely updates the model with the new game and, if required, initiates
 the asynchronous generation of a new random shape (which is then added to the game's model later).
 -}
 handleMoveResult : PlayingModel -> Game.MoveResult -> ( Model, Cmd Msg )
 handleMoveResult currentPlayingModel moveResult =
     case moveResult of
-        Game.Continue { game, newShapeRequested, blinkAnimation } ->
+        Game.Continue continueResult ->
             let
-                nextCmd =
-                    if newShapeRequested then
-                        generateRandomShape
+                generateRandomShapeCmd : List (Cmd Msg)
+                generateRandomShapeCmd =
+                    if continueResult.newShapeRequested then
+                        [ generateRandomShape ]
 
                     else
-                        Cmd.none
+                        []
+
+                buildStartAnimationCmd : Game.HighlightedBlockInfo -> List (Cmd Msg)
+                buildStartAnimationCmd newHighlightInfo =
+                    [ Task.perform
+                        (\now -> NewAnimationRequested { highlightInfo = newHighlightInfo, start = now })
+                        Time.now
+                    ]
+
+                ( nextModelHighlightAnimation, startAnimationCmd ) =
+                    case ( continueResult.blockInfo.highlighted, currentPlayingModel.highlightAnimation ) of
+                        ( Just continueResultHighlightInfo, Just currentHighlightAnimation ) ->
+                            -- Game told us there is some form of highlighting to be done, but we're already animating
+                            -- some type of highlighting: check whether this is a new one (in which case we need to
+                            -- reset all animation-related info).
+                            if isSameHighlightInfo continueResultHighlightInfo currentHighlightAnimation.info then
+                                -- The current animation should continue
+                                ( currentPlayingModel.highlightAnimation, [] )
+
+                            else
+                                -- New animation required - set the animation in the model to be nothing (as we can't
+                                -- start the animation till we have the current time), and initiate a task to get the
+                                -- current time, after which the highlighting animation can start.
+                                ( Nothing, buildStartAnimationCmd continueResultHighlightInfo )
+
+                        ( Just continueResultHighlightType, Nothing ) ->
+                            -- We aren't currently animating, but we now need to start.
+                            ( Nothing, buildStartAnimationCmd continueResultHighlightType )
+
+                        ( Nothing, _ ) ->
+                            -- No highlighting required
+                            ( Nothing, [] )
             in
-            ( Playing { currentPlayingModel | game = game }, nextCmd )
+            ( Playing
+                { currentPlayingModel
+                    | game = continueResult.game
+                    , normalBlocks = continueResult.blockInfo.normal
+                    , highlightAnimation = nextModelHighlightAnimation
+                }
+            , List.concat [ generateRandomShapeCmd, startAnimationCmd ] |> Cmd.batch
+            )
 
         Game.EndGame ->
             Debug.todo "Implement game end"

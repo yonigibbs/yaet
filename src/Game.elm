@@ -1,10 +1,11 @@
 module Game exposing
-    ( BlinkAnimation(..)
-    , Game
+    ( Game
+    , GameBlockInfo
+    , HighlightType(..)
+    , HighlightedBlockInfo
     , InitialisationInfo
     , MoveDirection(..)
     , MoveResult(..)
-    , blocks
     , moveShape
     , new
     , rotateShape
@@ -76,22 +77,30 @@ type MoveDirection
     | Right
 
 
-{-| Type defining that an animation is required to be created by the caller.
+{-| Type defining the form af highlighting that should be applied to some of the cells. The highlighting is done by
+"flashing" the cells (i.e. animating their colours fading out/in). The animation and re-rendering are all handled by the
+calling module.
 
-  - `LandedShapeAnimation`: Indicates that a shape is in a landed position so should be animated for the given length of
-    time (in milliseconds).
-  - `LineRemovalAnimation`: Indicates that one or more lines are about to be removed, so should be animated for the
-    given length of time (in milliseconds).
-
-If an animation is required then the caller should set up a timer subscription which will cause the game to be
-re-rendered every few milliseconds for the total length of time requested. The caller should keep track of how far
-through the animation has progressed and use this value when rendering the game so that blocks can be animated as
-blinking (e.g. when a line is about to be removed).
+  - `LandedShape`: Indicates that a shape is in a landed position (i.e. at the next timer drop event will be treated as
+    having landed).
+  - `LineRemoval`: Indicates that one or more lines are about to be removed.
 
 -}
-type BlinkAnimation
-    = LandedShapeAnimation Int
-    | LineRemovalAnimation Int
+type HighlightType
+    = LandedShape
+    | LineRemoval
+
+
+
+-- TODO: document
+
+
+type alias HighlightedBlockInfo =
+    { highlightType : HighlightType, blocks : List ( Block.Coord, Block.Colour ) }
+
+
+type alias GameBlockInfo =
+    { normal : List ( Block.Coord, Block.Colour ), highlighted : Maybe HighlightedBlockInfo }
 
 
 {-| The result of an action (either automated by a timer or made by the user) which moves a block.
@@ -100,13 +109,12 @@ type BlinkAnimation
       - `game`: the game itself, so it can be stored in the parent module's model.
       - `newShapeRequested`: a boolean indicating whether the caller should generate a random new shape (asynchronously,
         and report it back by calling `shapeGenerated`).
-      - `blinkAnimation`: a Maybe which, if it contains a value, defines that an animation of some blocks is required.
-        If so, a timer subscription should be set up by the calling module. See `BlinkAnimation` type for more info.
+      - `blockInfo`: TODO: document
   - `End` : means the game has ended.
 
 -}
 type MoveResult
-    = Continue { game : Game, newShapeRequested : Bool, blinkAnimation : Maybe BlinkAnimation }
+    = Continue { game : Game, newShapeRequested : Bool, blockInfo : GameBlockInfo }
     | EndGame -- TODO: think more about this - need to report board maybe, so it can still be rendered?
 
 
@@ -237,17 +245,9 @@ buildMoveResult newShapeRequested maybeNewDroppingShape model =
 
                 Nothing ->
                     model
-
-        -- TODO: implement line removal animation
-        blinkAnimation =
-            if newModel.droppingShape.canDropMore then
-                Nothing
-
-            else
-                Just <| LandedShapeAnimation model.timerDropDelay
     in
     -- TODO: currently this never ends games
-    Continue { game = Game newModel, newShapeRequested = newShapeRequested, blinkAnimation = blinkAnimation }
+    Continue { game = Game newModel, newShapeRequested = newShapeRequested, blockInfo = blocks model }
 
 
 withNewDroppingShape : DroppingShape -> Model -> Model
@@ -348,16 +348,23 @@ Returns a list of tuples, where the first value in the tuple is the block's coor
 colour.
 
 -}
-blocks : Game -> List ( Block.Coord, Block.Colour )
-blocks (Game game) =
+blocks : Model -> GameBlockInfo
+blocks { droppingShape, board } =
     let
         { colour } =
-            Shape.data game.droppingShape.shape
+            Shape.data droppingShape.shape
 
         droppingShapeBlocks =
-            calcShapeBlocksBoardCoords game.droppingShape |> List.map (\coord -> ( coord, colour ))
+            calcShapeBlocksBoardCoords droppingShape |> List.map (\coord -> ( coord, colour ))
     in
-    Board.occupiedCells game.board ++ droppingShapeBlocks
+    -- TODO: implement LineRemoval
+    if droppingShape.canDropMore then
+        { normal = Board.occupiedCells board
+        , highlighted = Just { highlightType = LandedShape, blocks = droppingShapeBlocks }
+        }
+
+    else
+        { normal = Board.occupiedCells board ++ droppingShapeBlocks, highlighted = Nothing }
 
 
 {-| Gets the timer drop delay for the supplied game, i.e. how long, in milliseconds, before the currently dropping shape
