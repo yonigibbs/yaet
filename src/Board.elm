@@ -2,9 +2,10 @@ module Board exposing
     ( Board
     , append
     , areCellsAvailable
+    , completedRows
     , emptyBoard
     , occupiedCells
-    , removeCompletedRows
+    , removeRows
     , xCellCount
     , yCellCount
     )
@@ -113,29 +114,10 @@ areCellsAvailable (Board board) coords =
     List.all (\( x, y ) -> x >= 0 && x < xCellCount && y >= 0 && y < yCellCount && isCellFree ( x, y )) coords
 
 
-{-| Removes any completed rows. Returns a tuple with the newly updated board and a list of the indexes of the rows that
-were removed (from the original board).
--}
-removeCompletedRows : Board -> ( Board, List Int )
-removeCompletedRows (Board board) =
-    let
-        rowsToRemove =
-            completedRows board
-
-        newRows =
-            if List.length rowsToRemove > 0 then
-                removeRows board rowsToRemove
-
-            else
-                board
-    in
-    ( Board newRows, rowsToRemove )
-
-
 {-| Gets a list of the indexes of the completed rows, if any.
 -}
-completedRows : Array Row -> List Int
-completedRows rows =
+completedRows : Board -> List Int
+completedRows (Board rows) =
     rows
         |> Array.indexedMap (\index row -> ( index, Array.toList row |> List.all isOccupiedCell ))
         |> Array.filter (\( _, isCompleted ) -> isCompleted)
@@ -145,8 +127,8 @@ completedRows rows =
 
 {-| Removes the lines at the supplied indexes (adding new empty
 -}
-removeRows : Array Row -> List Int -> Array Row
-removeRows rows indexes =
+removeRows : Board -> List Int -> Array Row
+removeRows (Board rows) indexes =
     let
         keptRows =
             Array.toIndexedList rows

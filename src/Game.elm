@@ -1,14 +1,13 @@
 module Game exposing
     ( Game
     , GameBlockInfo
-    , HighlightType(..)
-    , HighlightedBlockInfo
     , InitialisationInfo
     , MoveDirection(..)
     , MoveResult(..)
     , blocks
     , moveShape
     , new
+    , resumeAfterLineRemoval
     , rotateShape
     , shapeGenerated
     , timerDrop
@@ -48,7 +47,6 @@ info).
 type alias DroppingShape =
     { shape : Shape -- The shape itself
     , coord : Block.Coord -- The coordinates of the bottom-left corner of the grid containing the shape, on the board
-    , canDropMore : Bool -- Whether the shape can drop any further without having to move left or right - flashes if false.
     }
 
 
@@ -62,7 +60,7 @@ type Game
 -}
 type alias Model =
     { board : Board -- The current board (only landed blocks, not the currently dropping shape).
-    , droppingShape : DroppingShape -- The currently dropping shape.
+    , state : GameState
     , nextShape : Shape -- The next shape to use as the dropping shape once the current one lands.
     , shapeBuffer : List Shape -- Buffer of available random shapes. See comments on this module for details.
     }
@@ -70,7 +68,7 @@ type alias Model =
 
 type GameState
     = RegularGameState { droppingShape : DroppingShape }
-    | LineRemovalGameState
+    | LineRemovalGameState { completedRowIndexes : List Int }
 
 
 {-| The direction in which a shape can be moved by the user (or automatically, in the case of `Down`).
@@ -81,30 +79,8 @@ type MoveDirection
     | Right
 
 
-{-| Type defining the form af highlighting that should be applied to some of the cells. The highlighting is done by
-"flashing" the cells (i.e. animating their colours fading out/in). The animation and re-rendering are all handled by the
-calling module.
-
-  - `LandedShape`: Indicates that a shape is in a landed position (i.e. at the next timer drop event will be treated as
-    having landed).
-  - `LineRemoval`: Indicates that one or more lines are about to be removed.
-
--}
-type HighlightType
-    = LandedShape
-    | LineRemoval
-
-
-
--- TODO: document
-
-
-type alias HighlightedBlockInfo =
-    { highlightType : HighlightType, blocks : List ( Block.Coord, Block.Colour ) }
-
-
 type alias GameBlockInfo =
-    { normal : List ( Block.Coord, Block.Colour ), highlighted : Maybe HighlightedBlockInfo }
+    { normal : List ( Block.Coord, Block.Colour ), highlighted : List ( Block.Coord, Block.Colour ) }
 
 
 {-| The result of an action (either automated by a timer or made by the user) which moves a block.
@@ -119,7 +95,8 @@ type alias GameBlockInfo =
 -}
 type MoveResult
     = NoChange
-    | Continue { game : Game, newShapeRequested : Bool }
+    | Continue Game
+    | LineBeingRemoved Game
     | EndGame -- TODO: think more about this - need to report board maybe, so it can still be rendered?
 
 
@@ -140,7 +117,7 @@ new : InitialisationInfo -> Game
 new { initialShape, nextShape, shapeBuffer } =
     Game
         { board = Board.emptyBoard
-        , droppingShape = initDroppingShape initialShape
+        , state = RegularGameState { droppingShape = initDroppingShape initialShape }
         , nextShape = nextShape
         , shapeBuffer = shapeBuffer
         }
@@ -160,8 +137,7 @@ initDroppingShape shape =
         y =
             Board.yCellCount - shapeGridSize
     in
-    -- TODO: don't assume that canDropMore is true here - near end of game it might not be.
-    { shape = shape, coord = ( x, y ), canDropMore = True }
+    { shape = shape, coord = ( x, y ) }
 
 
 
@@ -178,82 +154,73 @@ call `shapeGenerated` when it's available.
 
 -}
 timerDrop : Game -> MoveResult
-timerDrop (Game ({ droppingShape } as model)) =
-    let
-        proposedDroppingShape =
-            { droppingShape | coord = nextCoord Down droppingShape.coord }
-    in
-    if isValidPosition model.board proposedDroppingShape then
-        -- It's valid for the currently dropping shape to go down by one row, so just do that. No need to ask for a new
-        -- shape to add to the buffer just now as we aren't yet using up the currently dropping one.
-        buildMoveResult False proposedDroppingShape model
+timerDrop (Game ({ state } as model)) =
+    case state of
+        RegularGameState { droppingShape } ->
+            let
+                proposedDroppingShape =
+                    { droppingShape | coord = nextCoord Down droppingShape.coord }
+            in
+            if isValidPosition model.board proposedDroppingShape then
+                -- It's valid for the currently dropping shape to go down by one row, so just do that.
+                continueWithNewDroppingShape proposedDroppingShape model
 
-    else
-        -- It's not valid for the currently dropping shape to go down by one row, so it must have landed.
-        handleDroppingShapeLanded model
+            else
+                -- It's not valid for the currently dropping shape to go down by one row, so it must have landed.
+                handleDroppingShapeLanded model
+
+        LineRemovalGameState _ ->
+            NoChange
 
 
 {-| Moves the currently dropping shape in the supplied direction, if possible. Returns the same tuple as `timerDrop`
 (see it for more details).
 -}
 moveShape : MoveDirection -> Game -> MoveResult
-moveShape direction (Game ({ droppingShape, board } as model)) =
-    let
-        proposedDroppingShape =
-            { droppingShape | coord = nextCoord direction droppingShape.coord }
-    in
-    case ( isValidPosition board proposedDroppingShape, direction ) of
-        ( True, _ ) ->
-            buildMoveResult False proposedDroppingShape model
+moveShape direction (Game ({ state, board } as model)) =
+    case state of
+        RegularGameState { droppingShape } ->
+            let
+                proposedDroppingShape =
+                    { droppingShape | coord = nextCoord direction droppingShape.coord }
+            in
+            case ( isValidPosition board proposedDroppingShape, direction ) of
+                ( True, _ ) ->
+                    continueWithNewDroppingShape proposedDroppingShape model
 
-        ( False, Down ) ->
-            handleDroppingShapeLanded model
+                ( False, Down ) ->
+                    handleDroppingShapeLanded model
 
-        ( False, _ ) ->
+                ( False, _ ) ->
+                    NoChange
+
+        LineRemovalGameState _ ->
             NoChange
 
 
 {-| Rotates the currently dropping shape in the supplied direction, if possible. Returns the updated game.
 -}
 rotateShape : Game -> Shape.RotationDirection -> MoveResult
-rotateShape (Game ({ droppingShape, board } as model)) direction =
-    let
-        proposedDroppingShape =
-            { droppingShape | shape = Shape.rotate direction droppingShape.shape }
-    in
-    if isValidPosition board proposedDroppingShape then
-        buildMoveResult False proposedDroppingShape model
+rotateShape (Game ({ state, board } as model)) direction =
+    case state of
+        RegularGameState { droppingShape } ->
+            let
+                proposedDroppingShape =
+                    { droppingShape | shape = Shape.rotate direction droppingShape.shape }
+            in
+            if isValidPosition board proposedDroppingShape then
+                continueWithNewDroppingShape proposedDroppingShape model
 
-    else
-        NoChange
+            else
+                NoChange
 
-
-{-| Builds the next move result, to return to the calling module. If the dropping shape has changed in any way, this is
-supplied as the second parameter. This then calculates whether that new dropping shape could potentially drop any
-further and, based on that, whether an animation for it should be initiated.
--}
-buildMoveResult : Bool -> DroppingShape -> Model -> MoveResult
-buildMoveResult newShapeRequested newDroppingShape model =
-    -- TODO: currently this never ends games
-    Continue
-        { game = Game (withNewDroppingShape newDroppingShape model)
-        , newShapeRequested = newShapeRequested
-        }
+        LineRemovalGameState _ ->
+            NoChange
 
 
-withNewDroppingShape : DroppingShape -> Model -> Model
-withNewDroppingShape droppingShape model =
-    let
-        nextDroppedCoord =
-            nextCoord Down droppingShape.coord
-
-        canDropMore =
-            isValidPosition model.board { droppingShape | coord = nextDroppedCoord }
-
-        nextDroppingShape =
-            { droppingShape | canDropMore = canDropMore }
-    in
-    { model | droppingShape = nextDroppingShape }
+continueWithNewDroppingShape : DroppingShape -> Model -> MoveResult
+continueWithNewDroppingShape droppingShape model =
+    Continue <| Game { model | state = RegularGameState { droppingShape = droppingShape } }
 
 
 {-| Handles the case when the dropping shape has landed: appends its blocks to the board and takes the next item off the
@@ -263,26 +230,56 @@ handleDroppingShapeLanded : Model -> MoveResult
 handleDroppingShapeLanded model =
     -- We can only do this we have a shape in the buffer, as we need to take a shape out the buffer and make it the new
     -- "next" shape.
-    case model.shapeBuffer of
-        firstInBuffer :: restOfBuffer ->
+    case ( model.shapeBuffer, model.state ) of
+        ( firstInBuffer :: restOfBuffer, RegularGameState { droppingShape } ) ->
             -- We have one, so we can use it:
             let
                 { colour } =
-                    Shape.data model.droppingShape.shape
+                    Shape.data droppingShape.shape
 
-                -- TODO: don't immediately remove completed rows as currently implemented - add some sort of quick
-                -- animation (fading? flashing?) to show the ones being removed. (Currently we ignore the second value
-                -- in the tuple returned below, but we'll need it when adding this animation.)
-                ( nextBoard, _ ) =
-                    Board.append model.board colour (calcShapeBlocksBoardCoords model.droppingShape)
-                        |> Board.removeCompletedRows
+                nextBoard =
+                    Board.append model.board colour (calcShapeBlocksBoardCoords droppingShape)
+
+                completedRows =
+                    Board.completedRows nextBoard
             in
-            { model | board = nextBoard, nextShape = firstInBuffer, shapeBuffer = restOfBuffer }
-                |> buildMoveResult True (initDroppingShape model.nextShape)
+            case completedRows of
+                [] ->
+                    -- No completed rows - continue as normal
+                    continueWithNewDroppingShape
+                        (initDroppingShape model.nextShape)
+                        { model | board = nextBoard, nextShape = firstInBuffer, shapeBuffer = restOfBuffer }
+
+                completedRowIndexes ->
+                    LineBeingRemoved <|
+                        Game
+                            { model
+                                | board = nextBoard
+                                , state = LineRemovalGameState { completedRowIndexes = completedRowIndexes }
+                            }
 
         _ ->
             -- Nothing in the buffer so we can't accept this
             NoChange
+
+
+resumeAfterLineRemoval : Game -> Game
+resumeAfterLineRemoval (Game model) =
+    -- We can only do this we have a shape in the buffer, as we need to take a shape out the buffer and make it the new
+    -- "next" shape. And we can only do it if we're in the expected state.
+    case ( model.shapeBuffer, model.state ) of
+        ( firstInBuffer :: restOfBuffer, LineRemovalGameState { completedRowIndexes } ) ->
+            -- We have one, so we can use it:
+            Game
+                { model
+                    | nextShape = firstInBuffer
+                    , shapeBuffer = restOfBuffer
+                    , state = RegularGameState { droppingShape = initDroppingShape model.nextShape }
+                }
+
+        _ ->
+            -- Nothing in the buffer so we can't accept this
+            Game model
 
 
 {-| Calculates the next coordinate of the supplied coordinate after it is moved one cell in the supplied direction.
@@ -340,20 +337,29 @@ colour.
 
 -}
 blocks : Game -> GameBlockInfo
-blocks (Game { droppingShape, board }) =
-    let
-        { colour } =
-            Shape.data droppingShape.shape
+blocks (Game { board, state }) =
+    case state of
+        RegularGameState { droppingShape } ->
+            let
+                { colour } =
+                    Shape.data droppingShape.shape
 
-        droppingShapeBlocks =
-            calcShapeBlocksBoardCoords droppingShape |> List.map (\coord -> ( coord, colour ))
-    in
-    -- TODO: implement LineRemoval
-    -- TODO: should we just calculate canDropMore here rather than store in model?
-    if droppingShape.canDropMore then
-        { normal = Board.occupiedCells board ++ droppingShapeBlocks, highlighted = Nothing }
+                droppingShapeBlocks =
+                    calcShapeBlocksBoardCoords droppingShape |> List.map (\coord -> ( coord, colour ))
 
-    else
-        { normal = Board.occupiedCells board
-        , highlighted = Just { highlightType = LandedShape, blocks = droppingShapeBlocks }
-        }
+                canDropMore =
+                    isValidPosition board { droppingShape | coord = nextCoord Down droppingShape.coord }
+            in
+            if canDropMore then
+                { normal = Board.occupiedCells board ++ droppingShapeBlocks, highlighted = [] }
+
+            else
+                { normal = Board.occupiedCells board, highlighted = droppingShapeBlocks }
+
+        LineRemovalGameState { completedRowIndexes } ->
+            let
+                ( completedRowCells, normalCells ) =
+                    Board.occupiedCells board
+                        |> List.partition (\( ( _, cellRowIndex ), _ ) -> List.member cellRowIndex completedRowIndexes)
+            in
+            { normal = normalCells, highlighted = completedRowCells }
