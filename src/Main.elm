@@ -63,7 +63,7 @@ type Msg
     | Initialised Game.InitialisationInfo -- Game has been initialised
     | RandomShapeGenerated Shape -- Random shape was asked for (to add to the buffer) and is now ready
     | MoveShapeRequested Game.MoveDirection -- User clicked arrow to move currently dropping shape in given direction
-    | RotateShapeRequested Shape.RotationDirection -- User pressed key to rotate currently droppiong shape in given direction
+    | RotateShapeRequested Shape.RotationDirection -- User pressed key to rotate currently dropping shape in given direction
     | TimerDropDelayElapsed -- Currently dropping shape should drop one row
     | NewAnimationRequested { highlightInfo : Game.HighlightedBlockInfo, start : Time.Posix }
 
@@ -97,7 +97,13 @@ update msg model =
             ( model, Cmd.none )
 
         ( Initialising, Initialised initialisationInfo ) ->
-            ( Playing { game = Game.new initialisationInfo, normalBlocks = [], highlightAnimation = Nothing }, Cmd.none )
+            let
+                newGame =
+                    Game.new initialisationInfo
+            in
+            ( Playing { game = newGame, normalBlocks = (Game.blocks newGame).normal, highlightAnimation = NoHighlightAnimation }
+            , Cmd.none
+            )
 
         ( _, Initialised _ ) ->
             ( model, Cmd.none )
@@ -130,6 +136,8 @@ update msg model =
             -- TODO: put in separate function
             case playingModel.highlightAnimation of
                 HighlightAnimationPending pendingAnimation ->
+                    -- TODO: is this logic right? Can we assume that if it's the same animation type then the message we
+                    -- received is definitely for the current model, or could something have moved on since then?
                     if isSameHighlightInfo request.highlightInfo pendingAnimation.info then
                         ( Playing
                             { playingModel
@@ -158,10 +166,7 @@ initialiseGame =
 
 isSameHighlightInfo : Game.HighlightedBlockInfo -> Game.HighlightedBlockInfo -> Bool
 isSameHighlightInfo info1 info2 =
-    info1.highlightType
-        == info2.highlightType
-        && List.sortBy Tuple.first info1.blocks
-        == List.sortBy Tuple.first info2.blocks
+    info1.highlightType == info2.highlightType
 
 
 {-| Handles the result of a movement in the game, namely updates the model with the new game and, if required, initiates
@@ -170,6 +175,9 @@ the asynchronous generation of a new random shape (which is then added to the ga
 handleMoveResult : PlayingModel -> Game.MoveResult -> ( Model, Cmd Msg )
 handleMoveResult currentPlayingModel moveResult =
     case moveResult of
+        Game.NoChange ->
+            ( Playing currentPlayingModel, Cmd.none )
+
         Game.Continue continueResult ->
             let
                 generateRandomShapeCmd : List (Cmd Msg)
@@ -180,6 +188,9 @@ handleMoveResult currentPlayingModel moveResult =
                     else
                         []
 
+                nextBlocks =
+                    Game.blocks continueResult.game
+
                 buildStartAnimationCmd : Game.HighlightedBlockInfo -> List (Cmd Msg)
                 buildStartAnimationCmd newHighlightInfo =
                     [ Task.perform
@@ -187,34 +198,70 @@ handleMoveResult currentPlayingModel moveResult =
                         Time.now
                     ]
 
+                maybeCurrentHighlight =
+                    case currentPlayingModel.highlightAnimation of
+                        NoHighlightAnimation ->
+                            Nothing
+
+                        HighlightAnimationPending animation ->
+                            Just animation.info
+
+                        HighlightAnimationInProgress animation ->
+                            Just animation.info
+
+                -- TODO: refactor all this - bit of a mess with duplication
                 ( nextModelHighlightAnimation, startAnimationCmd ) =
-                    case ( continueResult.blockInfo.highlighted, currentPlayingModel.highlightAnimation ) of
-                        ( Just continueResultHighlightInfo, Just currentHighlightAnimation ) ->
+                    case ( nextBlocks.highlighted, currentPlayingModel.highlightAnimation ) of
+                        ( Just nextHighlightInfo, HighlightAnimationInProgress currentHighlightAnimation ) ->
                             -- Game told us there is some form of highlighting to be done, but we're already animating
                             -- some type of highlighting: check whether this is a new one (in which case we need to
                             -- reset all animation-related info).
-                            if isSameHighlightInfo continueResultHighlightInfo currentHighlightAnimation.info then
-                                -- The current animation should continue
-                                ( currentPlayingModel.highlightAnimation, [] )
+                            if isSameHighlightInfo nextHighlightInfo currentHighlightAnimation.info then
+                                -- The current type of animation should continue, potentially with new blocks (e.g. if
+                                -- a block is as far down as it can go and the user quickly moves it before it's
+                                -- considered as fully landed).
+                                ( HighlightAnimationInProgress { currentHighlightAnimation | info = nextHighlightInfo }, [] )
 
                             else
-                                -- New animation required - set the animation in the model to be nothing (as we can't
+                                -- New animation required - set the animation in the model to be pending (as we can't
                                 -- start the animation till we have the current time), and initiate a task to get the
                                 -- current time, after which the highlighting animation can start.
-                                ( Nothing, buildStartAnimationCmd continueResultHighlightInfo )
+                                ( HighlightAnimationPending { info = nextHighlightInfo }
+                                , buildStartAnimationCmd nextHighlightInfo
+                                )
 
-                        ( Just continueResultHighlightType, Nothing ) ->
+                        ( Just nextHighlightInfo, HighlightAnimationPending currentHighlightAnimation ) ->
+                            -- Game told us there is some form of highlighting to be done, but we're pending animating
+                            -- some type of highlighting: check whether this is a new one (in which case we need to
+                            -- reset all animation-related info).
+                            if isSameHighlightInfo nextHighlightInfo currentHighlightAnimation.info then
+                                -- The current type of animation should continue, potentially with new blocks (e.g. if
+                                -- a block is as far down as it can go and the user quickly moves it before it's
+                                -- considered as fully landed).
+                                ( HighlightAnimationPending { currentHighlightAnimation | info = nextHighlightInfo }, [] )
+
+                            else
+                                -- New animation required - set the animation in the model to be pending (as we can't
+                                -- start the animation till we have the current time), and initiate a task to get the
+                                -- current time, after which the highlighting animation can start.
+                                ( HighlightAnimationPending { info = nextHighlightInfo }
+                                , buildStartAnimationCmd nextHighlightInfo
+                                )
+
+                        ( Just nextHighlightInfo, NoHighlightAnimation ) ->
                             -- We aren't currently animating, but we now need to start.
-                            ( Nothing, buildStartAnimationCmd continueResultHighlightType )
+                            ( HighlightAnimationPending { info = nextHighlightInfo }
+                            , buildStartAnimationCmd nextHighlightInfo
+                            )
 
                         ( Nothing, _ ) ->
                             -- No highlighting required
-                            ( Nothing, [] )
+                            ( NoHighlightAnimation, [] )
             in
             ( Playing
                 { currentPlayingModel
                     | game = continueResult.game
-                    , normalBlocks = continueResult.blockInfo.normal
+                    , normalBlocks = nextBlocks.normal
                     , highlightAnimation = nextModelHighlightAnimation
                 }
             , List.concat [ generateRandomShapeCmd, startAnimationCmd ] |> Cmd.batch
@@ -306,8 +353,17 @@ view model =
         Initialising ->
             Html.text "TODO: Initialising"
 
-        Playing { game } ->
-            GameRender.render game
+        Playing { normalBlocks, highlightAnimation } ->
+            let
+                requestHighlightInfo =
+                    case highlightAnimation of
+                        HighlightAnimationInProgress { info } ->
+                            Just { animationPercentComplete = 0, blocks = info.blocks }
+
+                        _ ->
+                            Nothing
+            in
+            GameRender.render { normalBlocks = normalBlocks, highlighted = requestHighlightInfo }
 
         Ended ->
             Html.text "TODO: Game ended"

@@ -1,4 +1,4 @@
-module GameRender exposing (render)
+module GameRender exposing (RenderRequest, render)
 
 {-| This module is responsible for rendering the game. Uses SVG but exposes no SVG information so that a different
 rendering technology can be swapped in later if required.
@@ -7,7 +7,6 @@ rendering technology can be swapped in later if required.
 import Block
 import Board
 import Color exposing (Color)
-import Game exposing (Game)
 import Html exposing (Html)
 import TypedSvg as Svg exposing (svg)
 import TypedSvg.Attributes as SvgA
@@ -15,15 +14,37 @@ import TypedSvg.Core exposing (Svg)
 import TypedSvg.Types as SvgT
 
 
+type alias RenderRequest =
+    { normalBlocks : List ( Block.Coord, Block.Colour )
+    , highlighted : Maybe { animationPercentComplete : Int, blocks : List ( Block.Coord, Block.Colour ) }
+    }
+
+
 {-| Renders the current state of the board into an HTML element, using SVG.
 -}
-render : Game -> Html msg
-render game =
+render : RenderRequest -> Html msg
+render { normalBlocks, highlighted } =
     let
-        blocks =
-            Game.blocks game
-                |> List.map (\( coord, colour ) -> drawBlock coord colour)
+        normalBlocksSvg =
+            normalBlocks
+                |> List.map (\( coord, colour ) -> drawBlock coord (toLightColour colour) (toDarkColour colour))
                 |> List.concat
+
+        highlightedBlocksSvg =
+            case highlighted of
+                Just { animationPercentComplete, blocks } ->
+                    blocks
+                        -- TODO: could cache colour calculations here per colour
+                        |> List.map
+                            (\( coord, colour ) ->
+                                drawBlock coord
+                                    (calcHighlightedBlockColour animationPercentComplete (toLightColour colour))
+                                    (calcHighlightedBlockColour animationPercentComplete (toDarkColour colour))
+                            )
+                        |> List.concat
+
+                Nothing ->
+                    []
     in
     svg
         [ SvgA.width boardSizeX, SvgA.height boardSizeY ]
@@ -37,8 +58,15 @@ render game =
             []
          ]
             ++ grid
-            ++ blocks
+            ++ normalBlocksSvg
+            ++ highlightedBlocksSvg
         )
+
+
+calcHighlightedBlockColour : Int -> Color -> Color
+calcHighlightedBlockColour animationPercentComplete colour =
+    -- TODO: implement
+    Color.white
 
 
 {-| Draws the vertical and horizontal lines on the baord that make it look like a grid.
@@ -71,8 +99,8 @@ gridLine x1 y1 x2 y2 =
 
 {-| Draws a block at the given coordinate, and of the given colour.
 -}
-drawBlock : Block.Coord -> Block.Colour -> List (Svg msg)
-drawBlock coord blockColour =
+drawBlock : Block.Coord -> Color -> Color -> List (Svg msg)
+drawBlock coord lightColour darkColour =
     let
         ( x1, y1 ) =
             coordToGridPos coord |> Tuple.mapBoth ((+) 1) ((+) 1)
@@ -86,7 +114,7 @@ drawBlock coord blockColour =
         , SvgA.y <| SvgT.px y1
         , SvgA.width <| SvgT.px innerSize
         , SvgA.height <| SvgT.px innerSize
-        , SvgA.fill <| SvgT.Paint <| toLightColour blockColour
+        , SvgA.fill <| SvgT.Paint lightColour
         ]
         []
     , -- A triangle of a slightly darker colour.
@@ -96,7 +124,7 @@ drawBlock coord blockColour =
             , ( x1 + innerSize, y1 )
             , ( x1, y1 + innerSize )
             ]
-        , SvgA.fill <| SvgT.Paint <| toDarkColour blockColour
+        , SvgA.fill <| SvgT.Paint darkColour
         ]
         []
     ]
