@@ -97,7 +97,7 @@ type HighlightType
 
 
 type alias HighlightedBlockInfo =
-    { highlightType : HighlightType, blocks : List ( Block.Coord, Block.Colour ) }
+    { highlightType : HighlightType, totalTimeMs : Int, blocks : List ( Block.Coord, Block.Colour ) }
 
 
 type alias GameBlockInfo =
@@ -345,7 +345,7 @@ colour.
 
 -}
 blocks : Game -> GameBlockInfo
-blocks (Game { droppingShape, board }) =
+blocks (Game ({ droppingShape, board } as model)) =
     let
         { colour } =
             Shape.data droppingShape.shape
@@ -360,7 +360,12 @@ blocks (Game { droppingShape, board }) =
 
     else
         { normal = Board.occupiedCells board
-        , highlighted = Just { highlightType = LandedShape, blocks = droppingShapeBlocks }
+        , highlighted =
+            Just
+                { highlightType = LandedShape
+                , totalTimeMs = model.timerDropDelay
+                , blocks = droppingShapeBlocks
+                }
         }
 
 

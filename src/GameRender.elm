@@ -16,7 +16,7 @@ import TypedSvg.Types as SvgT
 
 type alias RenderRequest =
     { normalBlocks : List ( Block.Coord, Block.Colour )
-    , highlighted : Maybe { animationPercentComplete : Int, blocks : List ( Block.Coord, Block.Colour ) }
+    , highlighted : Maybe { animationPercentComplete : Float, blocks : List ( Block.Coord, Block.Colour ) }
     }
 
 
@@ -63,10 +63,27 @@ render { normalBlocks, highlighted } =
         )
 
 
-calcHighlightedBlockColour : Int -> Color -> Color
+calcHighlightedBlockColour : Float -> Color -> Color
 calcHighlightedBlockColour animationPercentComplete colour =
-    -- TODO: implement
-    Color.white
+    let
+        calcColourPart part =
+            if animationPercentComplete < 50 then
+                -- Dim the colour by reducing it towards 0, but never quite that far.
+                part - (0.9 * part * animationPercentComplete / 50)
+
+            else
+                -- Brighten the colour back up from near 0 towards its initial value
+                part - (0.9 * (part * (100 - animationPercentComplete) / 50))
+    in
+    Color.toRgba colour
+        |> (\{ red, green, blue, alpha } ->
+                { red = calcColourPart red
+                , green = calcColourPart green
+                , blue = calcColourPart blue
+                , alpha = alpha
+                }
+           )
+        |> Color.fromRgba
 
 
 {-| Draws the vertical and horizontal lines on the baord that make it look like a grid.

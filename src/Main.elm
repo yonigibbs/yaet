@@ -47,7 +47,7 @@ type Model
 type HighlightAnimation
     = NoHighlightAnimation
     | HighlightAnimationPending { info : Game.HighlightedBlockInfo }
-    | HighlightAnimationInProgress { info : Game.HighlightedBlockInfo, start : Time.Posix }
+    | HighlightAnimationInProgress { info : Game.HighlightedBlockInfo, start : Time.Posix, percentComplete : Float }
 
 
 type alias PlayingModel =
@@ -65,7 +65,8 @@ type Msg
     | MoveShapeRequested Game.MoveDirection -- User clicked arrow to move currently dropping shape in given direction
     | RotateShapeRequested Shape.RotationDirection -- User pressed key to rotate currently dropping shape in given direction
     | TimerDropDelayElapsed -- Currently dropping shape should drop one row
-    | NewAnimationRequested { highlightInfo : Game.HighlightedBlockInfo, start : Time.Posix }
+    | HighlightAnimationStartTimeAvailable { highlightInfo : Game.HighlightedBlockInfo, start : Time.Posix }
+    | HighlightAnimationFrame { highlightType : Game.HighlightType, time : Time.Posix }
 
 
 
@@ -132,7 +133,7 @@ update msg model =
         ( _, TimerDropDelayElapsed ) ->
             ( model, Cmd.none )
 
-        ( Playing playingModel, NewAnimationRequested request ) ->
+        ( Playing playingModel, HighlightAnimationStartTimeAvailable request ) ->
             -- TODO: put in separate function
             case playingModel.highlightAnimation of
                 HighlightAnimationPending pendingAnimation ->
@@ -142,7 +143,11 @@ update msg model =
                         ( Playing
                             { playingModel
                                 | highlightAnimation =
-                                    HighlightAnimationInProgress { info = request.highlightInfo, start = request.start }
+                                    HighlightAnimationInProgress
+                                        { info = request.highlightInfo
+                                        , percentComplete = 0
+                                        , start = request.start
+                                        }
                             }
                         , Cmd.none
                         )
@@ -153,7 +158,40 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        ( _, NewAnimationRequested _ ) ->
+        ( _, HighlightAnimationStartTimeAvailable _ ) ->
+            ( model, Cmd.none )
+
+        ( Playing playingModel, HighlightAnimationFrame { highlightType, time } ) ->
+            -- TODO: put in separate function
+            case playingModel.highlightAnimation of
+                HighlightAnimationInProgress ({ start, percentComplete } as highlightAnimation) ->
+                    -- TODO: is this logic right? Can we assume that if it's the same animation type then the message we
+                    -- received is definitely for the current model, or could something have moved on since then?
+                    if highlightType == highlightAnimation.info.highlightType then
+                        let
+                            newPercentComplete =
+                                toFloat (Time.posixToMillis time - Time.posixToMillis start)
+                                    / toFloat highlightAnimation.info.totalTimeMs
+                                    * 100
+
+                            newHighlightAnimation =
+                                if newPercentComplete < 100 then
+                                    HighlightAnimationInProgress { highlightAnimation | percentComplete = newPercentComplete }
+
+                                else
+                                    NoHighlightAnimation
+                        in
+                        ( Playing { playingModel | highlightAnimation = newHighlightAnimation }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        ( _, HighlightAnimationFrame _ ) ->
             ( model, Cmd.none )
 
 
@@ -194,7 +232,7 @@ handleMoveResult currentPlayingModel moveResult =
                 buildStartAnimationCmd : Game.HighlightedBlockInfo -> List (Cmd Msg)
                 buildStartAnimationCmd newHighlightInfo =
                     [ Task.perform
-                        (\now -> NewAnimationRequested { highlightInfo = newHighlightInfo, start = now })
+                        (\now -> HighlightAnimationStartTimeAvailable { highlightInfo = newHighlightInfo, start = now })
                         Time.now
                     ]
 
@@ -357,8 +395,8 @@ view model =
             let
                 requestHighlightInfo =
                     case highlightAnimation of
-                        HighlightAnimationInProgress { info } ->
-                            Just { animationPercentComplete = 0, blocks = info.blocks }
+                        HighlightAnimationInProgress { info, percentComplete } ->
+                            Just { animationPercentComplete = percentComplete, blocks = info.blocks }
 
                         _ ->
                             Nothing
@@ -382,11 +420,27 @@ subscriptions model =
         Initialising ->
             Sub.none
 
-        Playing { game } ->
-            Sub.batch
+        Playing { game, highlightAnimation } ->
+            let
+                animationFrameSub =
+                    case highlightAnimation of
+                        -- TODO: how do we know when this timer event arrives that this animation is still in progress?
+                        HighlightAnimationInProgress { info, start } ->
+                            -- TODO: is 50ms the right value here?
+                            [ Time.every 50
+                                (\now ->
+                                    HighlightAnimationFrame { highlightType = info.highlightType, time = now }
+                                )
+                            ]
+
+                        _ ->
+                            []
+            in
+            Sub.batch <|
                 [ Time.every (Game.timerDropDelay game |> toFloat) <| always TimerDropDelayElapsed
                 , Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
                 ]
+                    ++ animationFrameSub
 
         Ended ->
             Sub.none
