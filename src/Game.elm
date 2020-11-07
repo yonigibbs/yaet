@@ -12,7 +12,6 @@ module Game exposing
     , rotateShape
     , shapeGenerated
     , timerDrop
-    , timerDropDelay
     )
 
 {-| This module controls the game currently being played. It's responsible for moving the dropping shape, adding a new
@@ -65,9 +64,13 @@ type alias Model =
     { board : Board -- The current board (only landed blocks, not the currently dropping shape).
     , droppingShape : DroppingShape -- The currently dropping shape.
     , nextShape : Shape -- The next shape to use as the dropping shape once the current one lands.
-    , timerDropDelay : Int -- How long, in ms, before the currently dropping shape should be automatically dropped down a row.
     , shapeBuffer : List Shape -- Buffer of available random shapes. See comments on this module for details.
     }
+
+
+type GameState
+    = RegularGameState { droppingShape : DroppingShape }
+    | LineRemovalGameState
 
 
 {-| The direction in which a shape can be moved by the user (or automatically, in the case of `Down`).
@@ -97,7 +100,7 @@ type HighlightType
 
 
 type alias HighlightedBlockInfo =
-    { highlightType : HighlightType, totalTimeMs : Int, blocks : List ( Block.Coord, Block.Colour ) }
+    { highlightType : HighlightType, blocks : List ( Block.Coord, Block.Colour ) }
 
 
 type alias GameBlockInfo =
@@ -131,13 +134,6 @@ type alias InitialisationInfo =
     { initialShape : Shape, nextShape : Shape, shapeBuffer : List Shape }
 
 
-{-| The default period to wait before the next timer drop kicks in (i.e. the dropping shape is dropped one more row in
-the board.
--}
-defaultInitialDropDelay =
-    1000
-
-
 {-| Starts a new game with the supplied shape as the initially dropping shape.
 -}
 new : InitialisationInfo -> Game
@@ -146,7 +142,6 @@ new { initialShape, nextShape, shapeBuffer } =
         { board = Board.emptyBoard
         , droppingShape = initDroppingShape initialShape
         , nextShape = nextShape
-        , timerDropDelay = defaultInitialDropDelay
         , shapeBuffer = shapeBuffer
         }
 
@@ -345,7 +340,7 @@ colour.
 
 -}
 blocks : Game -> GameBlockInfo
-blocks (Game ({ droppingShape, board } as model)) =
+blocks (Game { droppingShape, board }) =
     let
         { colour } =
             Shape.data droppingShape.shape
@@ -360,18 +355,5 @@ blocks (Game ({ droppingShape, board } as model)) =
 
     else
         { normal = Board.occupiedCells board
-        , highlighted =
-            Just
-                { highlightType = LandedShape
-                , totalTimeMs = model.timerDropDelay
-                , blocks = droppingShapeBlocks
-                }
+        , highlighted = Just { highlightType = LandedShape, blocks = droppingShapeBlocks }
         }
-
-
-{-| Gets the timer drop delay for the supplied game, i.e. how long, in milliseconds, before the currently dropping shape
-should be automatically dropped down a row.
--}
-timerDropDelay : Game -> Int
-timerDropDelay (Game model) =
-    model.timerDropDelay

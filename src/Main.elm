@@ -46,12 +46,21 @@ type Model
 
 type HighlightAnimation
     = NoHighlightAnimation
-    | HighlightAnimationPending { info : Game.HighlightedBlockInfo }
-    | HighlightAnimationInProgress { info : Game.HighlightedBlockInfo, start : Time.Posix, percentComplete : Float }
+    | HighlightAnimationPending { info : Game.HighlightedBlockInfo, totalTimeMs : Int }
+    | HighlightAnimationInProgress
+        { info : Game.HighlightedBlockInfo
+        , totalTimeMs : Int
+        , start : Time.Posix
+        , percentComplete : Float
+        }
 
 
 type alias PlayingModel =
-    { game : Game, normalBlocks : List ( Block.Coord, Block.Colour ), highlightAnimation : HighlightAnimation }
+    { game : Game
+    , timerDropDelay : Int -- How long, in ms, before the currently dropping shape should be automatically dropped down a row.
+    , normalBlocks : List ( Block.Coord, Block.Colour )
+    , highlightAnimation : HighlightAnimation
+    }
 
 
 
@@ -102,7 +111,8 @@ update msg model =
                 newGame =
                     Game.new initialisationInfo
             in
-            ( Playing { game = newGame, normalBlocks = (Game.blocks newGame).normal, highlightAnimation = NoHighlightAnimation }
+            -- TODO: hard-coded 1000 here - configurable? right value?
+            ( Playing { game = newGame, timerDropDelay = 1000, normalBlocks = (Game.blocks newGame).normal, highlightAnimation = NoHighlightAnimation }
             , Cmd.none
             )
 
@@ -145,6 +155,7 @@ update msg model =
                                 | highlightAnimation =
                                     HighlightAnimationInProgress
                                         { info = request.highlightInfo
+                                        , totalTimeMs = pendingAnimation.totalTimeMs
                                         , percentComplete = 0
                                         , start = request.start
                                         }
@@ -164,15 +175,13 @@ update msg model =
         ( Playing playingModel, HighlightAnimationFrame { highlightType, time } ) ->
             -- TODO: put in separate function
             case playingModel.highlightAnimation of
-                HighlightAnimationInProgress ({ start, percentComplete } as highlightAnimation) ->
+                HighlightAnimationInProgress ({ start, totalTimeMs, percentComplete } as highlightAnimation) ->
                     -- TODO: is this logic right? Can we assume that if it's the same animation type then the message we
                     -- received is definitely for the current model, or could something have moved on since then?
                     if highlightType == highlightAnimation.info.highlightType then
                         let
                             newPercentComplete =
-                                toFloat (Time.posixToMillis time - Time.posixToMillis start)
-                                    / toFloat highlightAnimation.info.totalTimeMs
-                                    * 100
+                                toFloat (Time.posixToMillis time - Time.posixToMillis start) / toFloat totalTimeMs * 100
 
                             newHighlightAnimation =
                                 if newPercentComplete < 100 then
@@ -236,17 +245,6 @@ handleMoveResult currentPlayingModel moveResult =
                         Time.now
                     ]
 
-                maybeCurrentHighlight =
-                    case currentPlayingModel.highlightAnimation of
-                        NoHighlightAnimation ->
-                            Nothing
-
-                        HighlightAnimationPending animation ->
-                            Just animation.info
-
-                        HighlightAnimationInProgress animation ->
-                            Just animation.info
-
                 -- TODO: refactor all this - bit of a mess with duplication
                 ( nextModelHighlightAnimation, startAnimationCmd ) =
                     case ( nextBlocks.highlighted, currentPlayingModel.highlightAnimation ) of
@@ -264,7 +262,10 @@ handleMoveResult currentPlayingModel moveResult =
                                 -- New animation required - set the animation in the model to be pending (as we can't
                                 -- start the animation till we have the current time), and initiate a task to get the
                                 -- current time, after which the highlighting animation can start.
-                                ( HighlightAnimationPending { info = nextHighlightInfo }
+                                ( HighlightAnimationPending
+                                    { info = nextHighlightInfo
+                                    , totalTimeMs = animationTime currentPlayingModel nextHighlightInfo.highlightType
+                                    }
                                 , buildStartAnimationCmd nextHighlightInfo
                                 )
 
@@ -282,13 +283,19 @@ handleMoveResult currentPlayingModel moveResult =
                                 -- New animation required - set the animation in the model to be pending (as we can't
                                 -- start the animation till we have the current time), and initiate a task to get the
                                 -- current time, after which the highlighting animation can start.
-                                ( HighlightAnimationPending { info = nextHighlightInfo }
+                                ( HighlightAnimationPending
+                                    { info = nextHighlightInfo
+                                    , totalTimeMs = animationTime currentPlayingModel nextHighlightInfo.highlightType
+                                    }
                                 , buildStartAnimationCmd nextHighlightInfo
                                 )
 
                         ( Just nextHighlightInfo, NoHighlightAnimation ) ->
                             -- We aren't currently animating, but we now need to start.
-                            ( HighlightAnimationPending { info = nextHighlightInfo }
+                            ( HighlightAnimationPending
+                                { info = nextHighlightInfo
+                                , totalTimeMs = animationTime currentPlayingModel nextHighlightInfo.highlightType
+                                }
                             , buildStartAnimationCmd nextHighlightInfo
                             )
 
@@ -307,6 +314,17 @@ handleMoveResult currentPlayingModel moveResult =
 
         Game.EndGame ->
             Debug.todo "Implement game end"
+
+
+animationTime : { a | timerDropDelay : Int } -> Game.HighlightType -> Int
+animationTime { timerDropDelay } highlightType =
+    case highlightType of
+        Game.LandedShape ->
+            timerDropDelay
+
+        Game.LineRemoval ->
+            -- TODO: configurable? Right value?
+            500
 
 
 
@@ -420,7 +438,7 @@ subscriptions model =
         Initialising ->
             Sub.none
 
-        Playing { game, highlightAnimation } ->
+        Playing { game, timerDropDelay, highlightAnimation } ->
             let
                 animationFrameSub =
                     case highlightAnimation of
@@ -437,7 +455,7 @@ subscriptions model =
                             []
             in
             Sub.batch <|
-                [ Time.every (Game.timerDropDelay game |> toFloat) <| always TimerDropDelayElapsed
+                [ Time.every (toFloat timerDropDelay) <| always TimerDropDelayElapsed
                 , Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
                 ]
                     ++ animationFrameSub
