@@ -68,7 +68,7 @@ type alias Model =
 
 type GameState
     = RegularGameState { droppingShape : DroppingShape }
-    | LineRemovalGameState { completedRowIndexes : List Int }
+    | LineRemovalGameState { completedRowIndexes : List Int, nextDroppingShape : DroppingShape }
 
 
 {-| The direction in which a shape can be moved by the user (or automatically, in the case of `Down`).
@@ -84,19 +84,11 @@ type alias GameBlockInfo =
 
 
 {-| The result of an action (either automated by a timer or made by the user) which moves a block.
-
-  - Continue: means the game should continue. The returned record contains the following fields:
-      - `game`: the game itself, so it can be stored in the parent module's model.
-      - `newShapeRequested`: a boolean indicating whether the caller should generate a random new shape (asynchronously,
-        and report it back by calling `shapeGenerated`).
-      - `blockInfo`: TODO: document
-  - `End` : means the game has ended.
-
 -}
 type MoveResult
     = NoChange
-    | Continue Game
-    | LineBeingRemoved Game
+    | Continue { game : Game, newShapeRequested : Bool }
+    | LineBeingRemoved { game : Game } -- newShapeRequested is implicitly true here
     | EndGame -- TODO: think more about this - need to report board maybe, so it can still be rendered?
 
 
@@ -163,7 +155,7 @@ timerDrop (Game ({ state } as model)) =
             in
             if isValidPosition model.board proposedDroppingShape then
                 -- It's valid for the currently dropping shape to go down by one row, so just do that.
-                continueWithNewDroppingShape proposedDroppingShape model
+                continueWithNewDroppingShape False proposedDroppingShape model
 
             else
                 -- It's not valid for the currently dropping shape to go down by one row, so it must have landed.
@@ -186,7 +178,7 @@ moveShape direction (Game ({ state, board } as model)) =
             in
             case ( isValidPosition board proposedDroppingShape, direction ) of
                 ( True, _ ) ->
-                    continueWithNewDroppingShape proposedDroppingShape model
+                    continueWithNewDroppingShape False proposedDroppingShape model
 
                 ( False, Down ) ->
                     handleDroppingShapeLanded model
@@ -209,7 +201,7 @@ rotateShape (Game ({ state, board } as model)) direction =
                     { droppingShape | shape = Shape.rotate direction droppingShape.shape }
             in
             if isValidPosition board proposedDroppingShape then
-                continueWithNewDroppingShape proposedDroppingShape model
+                continueWithNewDroppingShape False proposedDroppingShape model
 
             else
                 NoChange
@@ -218,9 +210,12 @@ rotateShape (Game ({ state, board } as model)) direction =
             NoChange
 
 
-continueWithNewDroppingShape : DroppingShape -> Model -> MoveResult
-continueWithNewDroppingShape droppingShape model =
-    Continue <| Game { model | state = RegularGameState { droppingShape = droppingShape } }
+continueWithNewDroppingShape : Bool -> DroppingShape -> Model -> MoveResult
+continueWithNewDroppingShape newShapeRequested droppingShape model =
+    Continue
+        { game = Game { model | state = RegularGameState { droppingShape = droppingShape } }
+        , newShapeRequested = newShapeRequested
+        }
 
 
 {-| Handles the case when the dropping shape has landed: appends its blocks to the board and takes the next item off the
@@ -242,21 +237,30 @@ handleDroppingShapeLanded model =
 
                 completedRows =
                     Board.completedRows nextBoard
+
+                nextModel =
+                    { model | board = nextBoard, nextShape = firstInBuffer, shapeBuffer = restOfBuffer }
+
+                nextDroppingShape =
+                    initDroppingShape model.nextShape
             in
             case completedRows of
                 [] ->
                     -- No completed rows - continue as normal
-                    continueWithNewDroppingShape
-                        (initDroppingShape model.nextShape)
-                        { model | board = nextBoard, nextShape = firstInBuffer, shapeBuffer = restOfBuffer }
+                    continueWithNewDroppingShape True nextDroppingShape nextModel
 
                 completedRowIndexes ->
-                    LineBeingRemoved <|
-                        Game
-                            { model
-                                | board = nextBoard
-                                , state = LineRemovalGameState { completedRowIndexes = completedRowIndexes }
-                            }
+                    LineBeingRemoved
+                        { game =
+                            Game
+                                { nextModel
+                                    | state =
+                                        LineRemovalGameState
+                                            { completedRowIndexes = completedRowIndexes
+                                            , nextDroppingShape = nextDroppingShape
+                                            }
+                                }
+                        }
 
         _ ->
             -- Nothing in the buffer so we can't accept this
@@ -264,17 +268,17 @@ handleDroppingShapeLanded model =
 
 
 resumeAfterLineRemoval : Game -> Game
-resumeAfterLineRemoval (Game model) =
-    -- We can only do this we have a shape in the buffer, as we need to take a shape out the buffer and make it the new
-    -- "next" shape. And we can only do it if we're in the expected state.
-    case ( model.shapeBuffer, model.state ) of
-        ( firstInBuffer :: restOfBuffer, LineRemovalGameState { completedRowIndexes } ) ->
-            -- We have one, so we can use it:
+resumeAfterLineRemoval (Game ({ board, nextShape, state } as model)) =
+    case state of
+        LineRemovalGameState { completedRowIndexes, nextDroppingShape } ->
+            let
+                nextBoard =
+                    Board.removeRows board completedRowIndexes
+            in
             Game
                 { model
-                    | nextShape = firstInBuffer
-                    , shapeBuffer = restOfBuffer
-                    , state = RegularGameState { droppingShape = initDroppingShape model.nextShape }
+                    | board = nextBoard
+                    , state = RegularGameState { droppingShape = nextDroppingShape }
                 }
 
         _ ->

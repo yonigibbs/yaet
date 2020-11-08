@@ -162,7 +162,10 @@ update msg model =
             ( model, Cmd.none )
 
         ( Playing playingModel, HighlightAnimationStartTimeAvailable request ) ->
-            -- TODO: put in separate function and refactor a bit - helper functions etc
+            -- TODO: put in separate function and refactor a bit - helper function, or maybe if animation stuff is in a
+            -- separate module we can have Animation.map or something, which will check if the animation's ID matches
+            -- that of the one in the current model (i.e. whether the message should be handled or ignored). Apply to
+            -- other places, e.g. handleAnimationFrame.
             case playingModel.highlightAnimation of
                 Animating currentAnimation ->
                     if request.id == currentAnimation.id then
@@ -184,49 +187,8 @@ update msg model =
         ( _, HighlightAnimationStartTimeAvailable _ ) ->
             ( model, Cmd.none )
 
-        ( Playing playingModel, HighlightAnimationFrame frame ) ->
-            -- TODO: put in separate function
-            case playingModel.highlightAnimation of
-                Animating currentAnimation ->
-                    if currentAnimation.id == frame.id then
-                        case currentAnimation.progress of
-                            Just progress ->
-                                let
-                                    newPercentComplete =
-                                        toFloat (Time.posixToMillis frame.time - Time.posixToMillis progress.start)
-                                            / toFloat currentAnimation.totalTimeMs
-                                            * 100
-
-                                    newHighlightAnimation =
-                                        if newPercentComplete < 100 then
-                                            Animating
-                                                { currentAnimation
-                                                    | progress =
-                                                        Just
-                                                            { progress
-                                                                | percentComplete =
-                                                                    newPercentComplete
-                                                            }
-                                                }
-
-                                        else
-                                            NotAnimating
-                                in
-                                ( Playing { playingModel | highlightAnimation = newHighlightAnimation }
-                                , Cmd.none
-                                )
-
-                            Nothing ->
-                                ( model, Cmd.none )
-
-                    else
-                        ( model, Cmd.none )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        ( _, HighlightAnimationFrame _ ) ->
-            ( model, Cmd.none )
+        ( _, HighlightAnimationFrame { id, time } ) ->
+            handleAnimationFrame model id time
 
 
 {-| Initialises the game - this involves generating the random shapes required by the game to start.
@@ -246,39 +208,24 @@ handleMoveResult currentPlayingModel moveResult =
         Game.NoChange ->
             ( Playing currentPlayingModel, Cmd.none )
 
-        Game.Continue nextGame ->
+        Game.Continue { game, newShapeRequested } ->
             let
                 nextBlocks =
-                    Game.blocks nextGame
+                    Game.blocks game
 
-                startNewAnimation =
-                    ( Playing
-                        { currentPlayingModel
-                            | game = nextGame
-                            , normalBlocks = nextBlocks.normal
-                            , nextAnimationId = currentPlayingModel.nextAnimationId + 1
-                            , highlightAnimation =
-                                Animating
-                                    { id = currentPlayingModel.nextAnimationId
-                                    , animationType = ShapeLanding
-                                    , totalTimeMs = currentPlayingModel.timerDropDelay
-                                    , blocks = nextBlocks.highlighted
-                                    , progress = Nothing
-                                    }
-                        }
-                    , Task.perform
-                        (\now ->
-                            HighlightAnimationStartTimeAvailable { id = currentPlayingModel.nextAnimationId, start = now }
-                        )
-                        Time.now
-                    )
+                generateRandomShapeCmd =
+                    if newShapeRequested then
+                        generateRandomShape
+
+                    else
+                        Cmd.none
             in
             case nextBlocks.highlighted of
                 [] ->
                     -- No animation required as there are no highlighted blocks
                     ( Playing
-                        { currentPlayingModel | game = nextGame, normalBlocks = nextBlocks.normal, highlightAnimation = NotAnimating }
-                    , Cmd.none
+                        { currentPlayingModel | game = game, normalBlocks = nextBlocks.normal, highlightAnimation = NotAnimating }
+                    , generateRandomShapeCmd
                     )
 
                 _ ->
@@ -287,54 +234,123 @@ handleMoveResult currentPlayingModel moveResult =
                     -- current animation).
                     case currentPlayingModel.highlightAnimation of
                         NotAnimating ->
-                            startNewAnimation
+                            startNewAnimation currentPlayingModel game nextBlocks ShapeLanding [ generateRandomShapeCmd ]
 
                         Animating currentAnimation ->
                             if currentAnimation.animationType == ShapeLanding then
                                 -- Just continue this current animation, but update the blocks on it
                                 ( Playing
                                     { currentPlayingModel
-                                        | game = nextGame
+                                        | game = game
                                         , normalBlocks = nextBlocks.normal
                                         , highlightAnimation = Animating { currentAnimation | blocks = nextBlocks.highlighted }
                                     }
-                                , Cmd.none
+                                , generateRandomShapeCmd
                                 )
 
                             else
-                                startNewAnimation
+                                startNewAnimation currentPlayingModel game nextBlocks ShapeLanding [ generateRandomShapeCmd ]
 
-        Game.LineBeingRemoved nextGame ->
+        Game.LineBeingRemoved { game } ->
             let
                 nextBlocks =
-                    Game.blocks nextGame
+                    Game.blocks game
             in
-            ( Playing
-                { currentPlayingModel
-                    | game = nextGame
-                    , normalBlocks = nextBlocks.normal
-                    , nextAnimationId = currentPlayingModel.nextAnimationId + 1
-                    , highlightAnimation =
-                        Animating
-                            { id = currentPlayingModel.nextAnimationId
-                            , animationType = LineRemoval
-                            , totalTimeMs = 500 -- TODO: hard-coded magic constant
-                            , blocks = nextBlocks.highlighted
-                            , progress = Nothing
-                            }
-                }
-            , Cmd.batch
-                [ Task.perform
-                    (\now ->
-                        HighlightAnimationStartTimeAvailable { id = currentPlayingModel.nextAnimationId, start = now }
-                    )
-                    Time.now
-                , generateRandomShape
-                ]
-            )
+            startNewAnimation currentPlayingModel game nextBlocks LineRemoval [ generateRandomShape ]
 
         Game.EndGame ->
             Debug.todo "Implement game end"
+
+
+handleAnimationFrame : Model -> Int -> Time.Posix -> ( Model, Cmd Msg )
+handleAnimationFrame model animationId time =
+    case model of
+        Playing playingModel ->
+            case playingModel.highlightAnimation of
+                Animating currentAnimation ->
+                    if currentAnimation.id == animationId then
+                        case currentAnimation.progress of
+                            Just progress ->
+                                let
+                                    newPercentComplete =
+                                        toFloat (Time.posixToMillis time - Time.posixToMillis progress.start)
+                                            / toFloat currentAnimation.totalTimeMs
+                                            * 100
+
+                                    ( newHighlightAnimation, nextGame ) =
+                                        if newPercentComplete < 100 then
+                                            ( Animating
+                                                { currentAnimation
+                                                    | progress =
+                                                        Just { progress | percentComplete = newPercentComplete }
+                                                }
+                                            , playingModel.game
+                                            )
+
+                                        else
+                                            -- Animation completed: if this is a line removal animation we now need to
+                                            -- update the game to know that the line removal is now complete.
+                                            case currentAnimation.animationType of
+                                                ShapeLanding ->
+                                                    --
+                                                    ( NotAnimating, playingModel.game )
+
+                                                LineRemoval ->
+                                                    ( NotAnimating, Game.resumeAfterLineRemoval playingModel.game )
+                                in
+                                ( Playing { playingModel | highlightAnimation = newHighlightAnimation, game = nextGame }
+                                , Cmd.none
+                                )
+
+                            Nothing ->
+                                ( model, Cmd.none )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+startNewAnimation : PlayingModel -> Game -> Game.GameBlockInfo -> HighlightAnimationType -> List (Cmd Msg) -> ( Model, Cmd Msg )
+startNewAnimation currentPlayingModel nextGame nextBlocks animationType extraCmds =
+    let
+        totalTimeMs =
+            case animationType of
+                ShapeLanding ->
+                    currentPlayingModel.timerDropDelay
+
+                LineRemoval ->
+                    500
+
+        -- TODO: hard-coded magic constant
+    in
+    ( Playing
+        { currentPlayingModel
+            | game = nextGame
+            , normalBlocks = nextBlocks.normal
+            , nextAnimationId = currentPlayingModel.nextAnimationId + 1
+            , highlightAnimation =
+                Animating
+                    { id = currentPlayingModel.nextAnimationId
+                    , animationType = animationType
+                    , totalTimeMs = totalTimeMs
+                    , blocks = nextBlocks.highlighted
+                    , progress = Nothing
+                    }
+        }
+    , Cmd.batch <|
+        [ Task.perform
+            (\now ->
+                HighlightAnimationStartTimeAvailable { id = currentPlayingModel.nextAnimationId, start = now }
+            )
+            Time.now
+        ]
+            ++ extraCmds
+    )
 
 
 

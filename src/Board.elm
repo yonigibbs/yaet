@@ -127,7 +127,7 @@ completedRows (Board rows) =
 
 {-| Removes the lines at the supplied indexes (adding new empty
 -}
-removeRows : Board -> List Int -> Array Row
+removeRows : Board -> List Int -> Board
 removeRows (Board rows) indexes =
     let
         keptRows =
@@ -145,7 +145,7 @@ removeRows (Board rows) indexes =
         newEmptyRows =
             Array.repeat (List.length indexes) emptyRow
     in
-    Array.append keptRows newEmptyRows
+    Board <| Array.append keptRows newEmptyRows
 
 
 {-| Appends the supplied coordinates as occupied cells onto the supplied board. Note that this doesn't automatically
