@@ -16,7 +16,8 @@ dropping (and which is rendered onto the grid represented by the board), is _not
 -}
 
 import Array exposing (Array)
-import Block
+import BlockColour exposing (BlockColour)
+import Coord exposing (Coord)
 
 
 {-| Represents the board. This is a 10x20 grid with cells, which can either be empty or have a block in them.
@@ -31,7 +32,7 @@ type Board
 -}
 type Cell
     = Empty
-    | Occupied Block.Colour
+    | Occupied BlockColour
 
 
 {-| A row in the grid. An alias for an array of `Cell`s.
@@ -58,10 +59,10 @@ Returns a list of tuples, where the first value in the tuple is the block's coor
 colour.
 
 -}
-occupiedCells : Board -> List ( Block.Coord, Block.Colour )
+occupiedCells : Board -> List ( Coord, BlockColour )
 occupiedCells (Board board) =
     let
-        rowPopulatedCells : Int -> Row -> List ( Block.Coord, Block.Colour )
+        rowPopulatedCells : Int -> Row -> List ( Coord, BlockColour )
         rowPopulatedCells y row =
             row
                 |> Array.indexedMap
@@ -99,10 +100,10 @@ isOccupiedCell =
 
 {-| Checks whether all the supplied coordinates are free on the supplied board (and within its legal coordinates).
 -}
-areCellsAvailable : Board -> List Block.Coord -> Bool
+areCellsAvailable : Board -> List Coord -> Bool
 areCellsAvailable (Board board) coords =
     let
-        isCellFree : Block.Coord -> Bool
+        isCellFree : Coord -> Bool
         isCellFree ( x, y ) =
             Array.get y board
                 |> Maybe.andThen (Array.get x)
@@ -151,10 +152,10 @@ removeRows (Board rows) indexes =
 {-| Appends the supplied coordinates as occupied cells onto the supplied board. Note that this doesn't automatically
 removed any newly completed lines.
 -}
-append : Board -> Block.Colour -> List Block.Coord -> Board
+append : Board -> BlockColour -> List Coord -> Board
 append (Board board) colour coords =
     let
-        appendCell : Block.Coord -> Array Row -> Array Row
+        appendCell : Coord -> Array Row -> Array Row
         appendCell ( x, y ) rows =
             -- Get the row
             Array.get y rows

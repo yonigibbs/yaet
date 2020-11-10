@@ -1,7 +1,7 @@
 module ShapeTests exposing (suite)
 
 import AsciiGrid
-import Block
+import BlockColour
 import Expect exposing (Expectation)
 import Shape exposing (Shape)
 import Test exposing (..)
@@ -68,7 +68,7 @@ findShape asciiShape =
     in
     Shape.builders
         |> (\( first, rest ) -> first :: rest)
-        |> List.map (\buildShape -> buildShape Block.Blue)
+        |> List.map (\buildShape -> buildShape BlockColour.Blue)
         |> List.filter (\shape_ -> (Shape.data shape_ |> .blocks |> List.sort) == blockCoords)
         |> List.head
 

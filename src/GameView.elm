@@ -1,12 +1,13 @@
-module GameRender exposing (RenderRequest, render)
+module GameView exposing (view)
 
 {-| This module is responsible for rendering the game. Uses SVG but exposes no SVG information so that a different
 rendering technology can be swapped in later if required.
 -}
 
-import Block
+import BlockColour exposing (BlockColour)
 import Board
 import Color exposing (Color)
+import Coord exposing (Coord)
 import HighlightAnimation
 import Html exposing (Html)
 import TypedSvg as Svg exposing (svg)
@@ -15,20 +16,17 @@ import TypedSvg.Core exposing (Svg)
 import TypedSvg.Types as SvgT
 
 
-type alias RenderRequest =
-    { normalBlocks : List ( Block.Coord, Block.Colour )
-    , highlightAnimation : Maybe HighlightAnimation.Model
-    }
-
-
 {-| Renders the current state of the board into an HTML element, using SVG.
 -}
-render : RenderRequest -> Html msg
-render { normalBlocks, highlightAnimation } =
+view : List ( Coord, BlockColour ) -> Maybe HighlightAnimation.Model -> Html msg
+view normalBlocks highlightAnimation =
     let
         normalBlocksSvg =
             normalBlocks
-                |> List.map (\( coord, colour ) -> drawBlock coord (toLightColour colour) (toDarkColour colour))
+                |> List.map
+                    (\( coord, colour ) ->
+                        drawBlock coord (BlockColour.toLightColour colour) (BlockColour.toDarkColour colour)
+                    )
                 |> List.concat
 
         highlightedBlocksSvg =
@@ -39,8 +37,8 @@ render { normalBlocks, highlightAnimation } =
                         |> List.map
                             (\( coord, colour ) ->
                                 drawBlock coord
-                                    (HighlightAnimation.animatedColour animation (toLightColour colour))
-                                    (HighlightAnimation.animatedColour animation (toDarkColour colour))
+                                    (HighlightAnimation.animatedColour animation (BlockColour.toLightColour colour))
+                                    (HighlightAnimation.animatedColour animation (BlockColour.toDarkColour colour))
                             )
                         |> List.concat
 
@@ -64,7 +62,7 @@ render { normalBlocks, highlightAnimation } =
         )
 
 
-{-| Draws the vertical and horizontal lines on the baord that make it look like a grid.
+{-| Draws the vertical and horizontal lines on the board that make it look like a grid.
 -}
 grid : List (Svg msg)
 grid =
@@ -94,7 +92,7 @@ gridLine x1 y1 x2 y2 =
 
 {-| Draws a block at the given coordinate, and of the given colour.
 -}
-drawBlock : Block.Coord -> Color -> Color -> List (Svg msg)
+drawBlock : Coord -> Color -> Color -> List (Svg msg)
 drawBlock coord lightColour darkColour =
     let
         ( x1, y1 ) =
@@ -127,7 +125,7 @@ drawBlock coord lightColour darkColour =
 
 {-| Gets the position on the grid of the bottom left hand corner of a cell with the supplied coordinates.
 -}
-coordToGridPos : Block.Coord -> ( Float, Float )
+coordToGridPos : Coord -> ( Float, Float )
 coordToGridPos ( x, y ) =
     ( toFloat x * cellSize, Board.yCellCount - y - 1 |> toFloat |> (*) cellSize )
 
@@ -151,47 +149,3 @@ boardSizeX =
 boardSizeY : SvgT.Length
 boardSizeY =
     cellSize * toFloat Board.yCellCount |> SvgT.px
-
-
-toDarkColour : Block.Colour -> Color
-toDarkColour blockColour =
-    case blockColour of
-        Block.Blue ->
-            Color.darkBlue
-
-        Block.Red ->
-            Color.darkRed
-
-        Block.Orange ->
-            Color.darkOrange
-
-        Block.Yellow ->
-            Color.darkYellow
-
-        Block.Purple ->
-            Color.darkPurple
-
-        Block.Green ->
-            Color.darkGreen
-
-
-toLightColour : Block.Colour -> Color
-toLightColour blockColour =
-    case blockColour of
-        Block.Blue ->
-            Color.lightBlue
-
-        Block.Red ->
-            Color.lightRed
-
-        Block.Orange ->
-            Color.lightOrange
-
-        Block.Yellow ->
-            Color.lightYellow
-
-        Block.Purple ->
-            Color.lightPurple
-
-        Block.Green ->
-            Color.lightGreen

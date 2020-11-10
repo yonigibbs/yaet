@@ -1,11 +1,17 @@
 module Main exposing (main)
 
+{-| This is the main module of the application. It renders the main UI (the instructions etc), delegating the rendering
+of the actual game to `GameView`. It's responsible for passing user/timer events to the `Game` module for it to update
+the game accordingly.
+-}
+
 import Array exposing (Array)
-import Block
+import BlockColour exposing (BlockColour)
 import Browser
 import Browser.Events
+import Coord exposing (Coord)
 import Game exposing (Game)
-import GameRender
+import GameView
 import HighlightAnimation
 import Html exposing (Html)
 import Html.Events
@@ -44,14 +50,28 @@ type Model
     | Ended -- Game has ended (TODO: add data here for rendering end state of game?)
 
 
+{-| When the game is in the `Playing` state, this is the data associated with it.
 
--- TODO: put animation-related stuff in its own module?
+  - `game`: The current game, passed into the `Game` module whenever events occur such as the user moving a block, etc.
+  - `timerDropDelay`: How long, in ms, before the currently dropping shape should be automatically dropped down a row.
+    As the game continues this decrements to make the game speed up.
+  - `normalBlocks`: The normal blocks which are to be rendered with no special effects (animation). These are calculated
+    by calling `Game.blocks` (which calculates them based on the supplied `game`), so arguably it's a redundant duplication
+    to store them in the model here, but this is done for performance reasons. `Game.blocks` has to do a bit of
+    calculation to convert its own internal representation of the game's state to that required for rendering it, and we
+    don't want that calculation to run multiple times a second when rendering animations, so we store it here. It's
+    important that whenever `game` is updated with potentially new blocks, this field is correspondingly updated.
+  - `highlightAnimation`: If any blocks are currently highlighted (e.g. because a shape is about to land) this contains
+    the animation used to provide that highlighting. As for `normalBlocks`, this information can be calculated from the
+    game, but for performance reasons is stored in the model.
+  - `nextAnimationId`: The unique ID to use for the next animation. See the `Id` type in the `HighlightAnimation` module
+    for more info on this.
 
-
+-}
 type alias PlayingModel =
     { game : Game
-    , timerDropDelay : Int -- How long, in ms, before the currently dropping shape should be automatically dropped down a row.
-    , normalBlocks : List ( Block.Coord, Block.Colour )
+    , timerDropDelay : Int
+    , normalBlocks : List ( Coord, BlockColour )
     , highlightAnimation : Maybe HighlightAnimation.Model
     , nextAnimationId : HighlightAnimation.Id
     }
@@ -68,11 +88,7 @@ type Msg
     | MoveShapeRequested Game.MoveDirection -- User clicked arrow to move currently dropping shape in given direction
     | RotateShapeRequested Shape.RotationDirection -- User pressed key to rotate currently dropping shape in given direction
     | TimerDropDelayElapsed -- Currently dropping shape should drop one row
-    | HighlightAnimationMsg HighlightAnimation.Msg
-
-
-
--- New highlighting animation ready to start (as we have current time)
+    | HighlightAnimationMsg HighlightAnimation.Msg -- A message from the `HighlightAnimation` module as occurred: this is passed to that module to handle.
 
 
 {-| Mapping of keyboard buttons to corresponding messages.
@@ -100,20 +116,7 @@ update msg model =
             ( model, Cmd.none )
 
         ( Initialising, Initialised initialisationInfo ) ->
-            let
-                newGame =
-                    Game.new initialisationInfo
-            in
-            -- TODO: hard-coded 1000 here - configurable? right value?
-            ( Playing
-                { game = newGame
-                , timerDropDelay = 1000
-                , normalBlocks = (Game.blocks newGame).normal
-                , highlightAnimation = Nothing
-                , nextAnimationId = HighlightAnimation.initialId
-                }
-            , Cmd.none
-            )
+            startNewGame initialisationInfo
 
         ( _, Initialised _ ) ->
             ( model, Cmd.none )
@@ -142,43 +145,8 @@ update msg model =
         ( _, TimerDropDelayElapsed ) ->
             ( model, Cmd.none )
 
-        ( Playing playingModel, HighlightAnimationMsg highlightAnimationMsg ) ->
-            case playingModel.highlightAnimation of
-                Just currentAnimation ->
-                    case HighlightAnimation.update highlightAnimationMsg currentAnimation of
-                        HighlightAnimation.IgnoreMsg ->
-                            ( model, Cmd.none )
-
-                        HighlightAnimation.Continue ( nextAnimationModel, nextAnimationCmd ) ->
-                            ( Playing { playingModel | highlightAnimation = Just nextAnimationModel }
-                            , Cmd.map HighlightAnimationMsg nextAnimationCmd
-                            )
-
-                        HighlightAnimation.Complete ->
-                            case HighlightAnimation.highlightAnimationType currentAnimation of
-                                HighlightAnimation.ShapeLanding ->
-                                    Game.timerDrop playingModel.game |> handleMoveResult playingModel
-
-                                HighlightAnimation.LineRemoval ->
-                                    let
-                                        nextGame =
-                                            Game.onLineRemovalAnimationComplete playingModel.game
-                                    in
-                                    ( Playing
-                                        { playingModel
-                                            | game = nextGame
-                                            , timerDropDelay = max (playingModel.timerDropDelay - 10) 100
-                                            , normalBlocks = (Game.blocks nextGame).normal
-                                            , highlightAnimation = Nothing
-                                        }
-                                    , Cmd.none
-                                    )
-
-                Nothing ->
-                    ( model, Cmd.none )
-
-        ( _, HighlightAnimationMsg _ ) ->
-            ( model, Cmd.none )
+        ( _, HighlightAnimationMsg highlightAnimationMsg ) ->
+            handleAnimationMsg model highlightAnimationMsg
 
 
 {-| Initialises the game - this involves generating the random shapes required by the game to start.
@@ -188,12 +156,30 @@ initialiseGame =
     ( Initialising, Random.generate Initialised initialGameDataGenerator )
 
 
+{-| Starts a new game after it's been initialised.
+-}
+startNewGame : Game.InitialisationInfo -> ( Model, Cmd msg )
+startNewGame initialisationInfo =
+    let
+        newGame =
+            Game.new initialisationInfo
+    in
+    ( Playing
+        { game = newGame
+        , timerDropDelay = 1000 -- TODO: hard-coded 1000 here - configurable? right value?
+        , normalBlocks = (Game.blocks newGame).normal
+        , highlightAnimation = Nothing -- We know initially there is nothing highlighted.
+        , nextAnimationId = HighlightAnimation.initialId
+        }
+    , Cmd.none
+    )
+
+
 {-| Handles the result of a movement in the game, namely updates the model with the new game and, if required, initiates
 the asynchronous generation of a new random shape (which is then added to the game's model later).
 -}
 handleMoveResult : PlayingModel -> Game.MoveResult -> ( Model, Cmd Msg )
 handleMoveResult currentPlayingModel moveResult =
-    -- TODO: refactor and split out
     case moveResult of
         Game.NoChange ->
             ( Playing currentPlayingModel, Cmd.none )
@@ -241,17 +227,19 @@ handleMoveResult currentPlayingModel moveResult =
                             else
                                 startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding [ generateRandomShapeCmd ]
 
-        Game.LineBeingRemoved { game } ->
+        Game.RowBeingRemoved { game } ->
             let
                 nextBlocks =
                     Game.blocks game
             in
-            startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.LineRemoval [ generateRandomShape ]
+            startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.RowRemoval [ generateRandomShape ]
 
         Game.EndGame ->
             Debug.todo "Implement game end"
 
 
+{-| Starts a new animation.
+-}
 startNewAnimation : PlayingModel -> Game -> Game.GameBlockInfo -> HighlightAnimation.Type -> List (Cmd Msg) -> ( Model, Cmd Msg )
 startNewAnimation currentPlayingModel game blocks animationType extraCmds =
     let
@@ -273,15 +261,65 @@ startNewAnimation currentPlayingModel game blocks animationType extraCmds =
     )
 
 
+{-| Handles a message from the `HighlightAnimation` module. Passes the message to that module to handle then based on the
+result from that function updates this module's model.
+-}
+handleAnimationMsg : Model -> HighlightAnimation.Msg -> ( Model, Cmd Msg )
+handleAnimationMsg model msg =
+    case model of
+        Playing playingModel ->
+            case playingModel.highlightAnimation of
+                Just currentAnimation ->
+                    case HighlightAnimation.update msg currentAnimation of
+                        HighlightAnimation.IgnoreMsg ->
+                            ( model, Cmd.none )
+
+                        HighlightAnimation.Continue ( nextAnimationModel, nextAnimationCmd ) ->
+                            ( Playing { playingModel | highlightAnimation = Just nextAnimationModel }
+                            , Cmd.map HighlightAnimationMsg nextAnimationCmd
+                            )
+
+                        HighlightAnimation.Complete ->
+                            case HighlightAnimation.highlightAnimationType currentAnimation of
+                                HighlightAnimation.ShapeLanding ->
+                                    -- When we've finished animating a shape landing, just call `timerDrop`, which will
+                                    -- "land" that shape and move the game forward (adding a new dropping shape, etc).
+                                    Game.timerDrop playingModel.game |> handleMoveResult playingModel
+
+                                HighlightAnimation.RowRemoval ->
+                                    -- When we've finished animating rows about to be removed, call
+                                    -- `onRowRemovalAnimationComplete` which will remove those rows from the board and
+                                    -- return the game to its regular state.
+                                    let
+                                        nextGame =
+                                            Game.onRowRemovalAnimationComplete playingModel.game
+                                    in
+                                    ( Playing
+                                        { playingModel
+                                            | game = nextGame
+                                            , timerDropDelay = max (playingModel.timerDropDelay - 10) 100
+                                            , normalBlocks = (Game.blocks nextGame).normal
+                                            , highlightAnimation = Nothing
+                                        }
+                                    , Cmd.none
+                                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
+
+
 
 -- RANDOM SHAPE GENERATION
 
 
 {-| All the possible colours, in an array so that one can be randomly chosen from it.
 -}
-allColours : Array Block.Colour
+allColours : Array BlockColour
 allColours =
-    Array.fromList [ Block.Blue, Block.Red, Block.Orange, Block.Yellow, Block.Purple, Block.Green ]
+    Array.fromList [ BlockColour.Blue, BlockColour.Red, BlockColour.Orange, BlockColour.Yellow, BlockColour.Purple, BlockColour.Green ]
 
 
 {-| Functions for generating each of the possible colours, in an array so that one can be randomly chosen from it.
@@ -295,10 +333,10 @@ allShapeBuilders =
     Array.fromList (first :: rest)
 
 
-randomColourGenerator : Random.Generator Block.Colour
+randomColourGenerator : Random.Generator BlockColour
 randomColourGenerator =
     Random.int 0 (Array.length allColours - 1)
-        |> Random.map (\index -> Array.get index allColours |> Maybe.withDefault Block.Blue)
+        |> Random.map (\index -> Array.get index allColours |> Maybe.withDefault BlockColour.Blue)
 
 
 randomShapeBuilderGenerator : Random.Generator Shape.ShapeBuilder
@@ -356,7 +394,7 @@ view model =
             Html.text "TODO: Initialising"
 
         Playing { normalBlocks, highlightAnimation } ->
-            GameRender.render { normalBlocks = normalBlocks, highlightAnimation = highlightAnimation }
+            GameView.view normalBlocks highlightAnimation
 
         Ended ->
             Html.text "TODO: Game ended"
@@ -380,6 +418,8 @@ subscriptions model =
                 subscription =
                     case highlightAnimation of
                         Just animation ->
+                            -- We're in the process of animating something so don't need the `timerDrop` event to occur:
+                            -- instead we use the end of the animation to know how to move the game on.
                             Sub.map HighlightAnimationMsg <| HighlightAnimation.subscriptions animation
 
                         _ ->
