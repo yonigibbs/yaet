@@ -167,6 +167,7 @@ update msg model =
                                     ( Playing
                                         { playingModel
                                             | game = nextGame
+                                            , timerDropDelay = max (playingModel.timerDropDelay - 10) 100
                                             , normalBlocks = (Game.blocks nextGame).normal
                                             , highlightAnimation = Nothing
                                         }

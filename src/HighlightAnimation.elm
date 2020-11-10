@@ -112,7 +112,7 @@ totalTimeMs animationType timerDropDelay =
             timerDropDelay
 
         LineRemoval ->
-            250
+            150
 
 
 highlightAnimationType : Model -> Type
