@@ -2,9 +2,10 @@ module Board exposing
     ( Board
     , append
     , areCellsAvailable
+    , completedRows
     , emptyBoard
     , occupiedCells
-    , removeCompletedRows
+    , removeRows
     , xCellCount
     , yCellCount
     )
@@ -15,7 +16,8 @@ dropping (and which is rendered onto the grid represented by the board), is _not
 -}
 
 import Array exposing (Array)
-import Block
+import BlockColour exposing (BlockColour)
+import Coord exposing (Coord)
 
 
 {-| Represents the board. This is a 10x20 grid with cells, which can either be empty or have a block in them.
@@ -30,7 +32,7 @@ type Board
 -}
 type Cell
     = Empty
-    | Occupied Block.Colour
+    | Occupied BlockColour
 
 
 {-| A row in the grid. An alias for an array of `Cell`s.
@@ -57,10 +59,10 @@ Returns a list of tuples, where the first value in the tuple is the block's coor
 colour.
 
 -}
-occupiedCells : Board -> List ( Block.Coord, Block.Colour )
+occupiedCells : Board -> List ( Coord, BlockColour )
 occupiedCells (Board board) =
     let
-        rowPopulatedCells : Int -> Row -> List ( Block.Coord, Block.Colour )
+        rowPopulatedCells : Int -> Row -> List ( Coord, BlockColour )
         rowPopulatedCells y row =
             row
                 |> Array.indexedMap
@@ -98,10 +100,10 @@ isOccupiedCell =
 
 {-| Checks whether all the supplied coordinates are free on the supplied board (and within its legal coordinates).
 -}
-areCellsAvailable : Board -> List Block.Coord -> Bool
+areCellsAvailable : Board -> List Coord -> Bool
 areCellsAvailable (Board board) coords =
     let
-        isCellFree : Block.Coord -> Bool
+        isCellFree : Coord -> Bool
         isCellFree ( x, y ) =
             Array.get y board
                 |> Maybe.andThen (Array.get x)
@@ -113,29 +115,10 @@ areCellsAvailable (Board board) coords =
     List.all (\( x, y ) -> x >= 0 && x < xCellCount && y >= 0 && y < yCellCount && isCellFree ( x, y )) coords
 
 
-{-| Removes any completed rows. Returns a tuple with the newly updated board and a list of the indexes of the rows that
-were removed (from the original board).
--}
-removeCompletedRows : Board -> ( Board, List Int )
-removeCompletedRows (Board board) =
-    let
-        rowsToRemove =
-            completedRows board
-
-        newRows =
-            if List.length rowsToRemove > 0 then
-                removeRows board rowsToRemove
-
-            else
-                board
-    in
-    ( Board newRows, rowsToRemove )
-
-
 {-| Gets a list of the indexes of the completed rows, if any.
 -}
-completedRows : Array Row -> List Int
-completedRows rows =
+completedRows : Board -> List Int
+completedRows (Board rows) =
     rows
         |> Array.indexedMap (\index row -> ( index, Array.toList row |> List.all isOccupiedCell ))
         |> Array.filter (\( _, isCompleted ) -> isCompleted)
@@ -145,8 +128,8 @@ completedRows rows =
 
 {-| Removes the lines at the supplied indexes (adding new empty
 -}
-removeRows : Array Row -> List Int -> Array Row
-removeRows rows indexes =
+removeRows : Board -> List Int -> Board
+removeRows (Board rows) indexes =
     let
         keptRows =
             Array.toIndexedList rows
@@ -163,16 +146,16 @@ removeRows rows indexes =
         newEmptyRows =
             Array.repeat (List.length indexes) emptyRow
     in
-    Array.append keptRows newEmptyRows
+    Board <| Array.append keptRows newEmptyRows
 
 
 {-| Appends the supplied coordinates as occupied cells onto the supplied board. Note that this doesn't automatically
 removed any newly completed lines.
 -}
-append : Board -> Block.Colour -> List Block.Coord -> Board
+append : Board -> BlockColour -> List Coord -> Board
 append (Board board) colour coords =
     let
-        appendCell : Block.Coord -> Array Row -> Array Row
+        appendCell : Coord -> Array Row -> Array Row
         appendCell ( x, y ) rows =
             -- Get the row
             Array.get y rows

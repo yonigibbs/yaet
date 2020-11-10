@@ -5,7 +5,7 @@ import Json.Decode as JD
 
 {-| All keys for which we have special handling.
 
-TODO: make keyboard bindinds configurable.
+TODO: make keyboard bindings configurable.
 
 -}
 type Key

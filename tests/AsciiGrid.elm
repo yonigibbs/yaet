@@ -16,7 +16,8 @@ cell is empty.
 
 -}
 
-import Block
+import BlockColour exposing (BlockColour)
+import Coord exposing (Coord)
 import Dict exposing (Dict)
 
 
@@ -30,10 +31,10 @@ Note that the returned list of coordinates is sorted by the coordinate, as that 
 returned list to some expected list.
 
 -}
-build : String -> Dict Char a -> List ( Block.Coord, a )
+build : String -> Dict Char a -> List ( Coord, a )
 build asciiGrid config =
     let
-        lineCoords : Int -> String -> List ( Block.Coord, a )
+        lineCoords : Int -> String -> List ( Coord, a )
         lineCoords y lineText =
             String.toList lineText
                 |> List.indexedMap
@@ -74,13 +75,13 @@ build asciiGrid config =
 
 {-| The configuration dictionary to supply to `AsciiGrid.Build` which maps each character to its corresponding colour.
 -}
-blockColourConfig : Dict.Dict Char Block.Colour
+blockColourConfig : Dict.Dict Char BlockColour
 blockColourConfig =
     Dict.fromList
-        [ ( 'b', Block.Blue )
-        , ( 'r', Block.Red )
-        , ( 'o', Block.Orange )
-        , ( 'y', Block.Yellow )
-        , ( 'p', Block.Purple )
-        , ( 'g', Block.Green )
+        [ ( 'b', BlockColour.Blue )
+        , ( 'r', BlockColour.Red )
+        , ( 'o', BlockColour.Orange )
+        , ( 'y', BlockColour.Yellow )
+        , ( 'p', BlockColour.Purple )
+        , ( 'g', BlockColour.Green )
         ]

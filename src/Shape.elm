@@ -58,7 +58,8 @@ that the top of the shape's grid should be at the top of board when that shape i
 
 -}
 
-import Block
+import BlockColour exposing (BlockColour)
+import Coord exposing (Coord)
 
 
 {-| A shape currently in the process of dropping down the board.
@@ -70,7 +71,7 @@ type Shape
 {-| The data associated with a `Shape`.
 -}
 type alias ShapeData =
-    { gridSize : Int, blocks : List Block.Coord, colour : Block.Colour }
+    { gridSize : Int, blocks : List Coord, colour : BlockColour }
 
 
 {-| The direction in which a shape can be rotated.
@@ -90,7 +91,7 @@ data (Shape shapeData) =
 {-| A function which is used to generate a valid shape.
 -}
 type alias ShapeBuilder =
-    Block.Colour -> Shape
+    BlockColour -> Shape
 
 
 {-| A list of functions, each of which creates a different shape, of some given colour. This list contains the functions
@@ -139,7 +140,7 @@ builders =
 rotate : RotationDirection -> Shape -> Shape
 rotate direction (Shape shapeData) =
     let
-        calcCoords : Block.Coord -> Block.Coord
+        calcCoords : Coord -> Coord
         calcCoords =
             case direction of
                 Clockwise ->
