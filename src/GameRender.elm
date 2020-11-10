@@ -7,6 +7,7 @@ rendering technology can be swapped in later if required.
 import Block
 import Board
 import Color exposing (Color)
+import HighlightAnimation
 import Html exposing (Html)
 import TypedSvg as Svg exposing (svg)
 import TypedSvg.Attributes as SvgA
@@ -16,14 +17,14 @@ import TypedSvg.Types as SvgT
 
 type alias RenderRequest =
     { normalBlocks : List ( Block.Coord, Block.Colour )
-    , highlighted : Maybe { animationPercentComplete : Float, blocks : List ( Block.Coord, Block.Colour ) }
+    , highlightAnimation : Maybe HighlightAnimation.Model
     }
 
 
 {-| Renders the current state of the board into an HTML element, using SVG.
 -}
 render : RenderRequest -> Html msg
-render { normalBlocks, highlighted } =
+render { normalBlocks, highlightAnimation } =
     let
         normalBlocksSvg =
             normalBlocks
@@ -31,15 +32,15 @@ render { normalBlocks, highlighted } =
                 |> List.concat
 
         highlightedBlocksSvg =
-            case highlighted of
-                Just { animationPercentComplete, blocks } ->
-                    blocks
+            case highlightAnimation of
+                Just animation ->
+                    HighlightAnimation.animatedBlocks animation
                         -- TODO: could cache colour calculations here per colour
                         |> List.map
                             (\( coord, colour ) ->
                                 drawBlock coord
-                                    (calcHighlightedBlockColour animationPercentComplete (toLightColour colour))
-                                    (calcHighlightedBlockColour animationPercentComplete (toDarkColour colour))
+                                    (HighlightAnimation.animatedColour animation (toLightColour colour))
+                                    (HighlightAnimation.animatedColour animation (toDarkColour colour))
                             )
                         |> List.concat
 
@@ -61,29 +62,6 @@ render { normalBlocks, highlighted } =
             ++ normalBlocksSvg
             ++ highlightedBlocksSvg
         )
-
-
-calcHighlightedBlockColour : Float -> Color -> Color
-calcHighlightedBlockColour animationPercentComplete colour =
-    let
-        calcColourPart part =
-            if animationPercentComplete < 50 then
-                -- Dim the colour by reducing it towards 0, but never quite that far.
-                part - (0.9 * part * animationPercentComplete / 50)
-
-            else
-                -- Brighten the colour back up from near 0 towards its initial value
-                part - (0.9 * (part * (100 - animationPercentComplete) / 50))
-    in
-    Color.toRgba colour
-        |> (\{ red, green, blue, alpha } ->
-                { red = calcColourPart red
-                , green = calcColourPart green
-                , blue = calcColourPart blue
-                , alpha = alpha
-                }
-           )
-        |> Color.fromRgba
 
 
 {-| Draws the vertical and horizontal lines on the baord that make it look like a grid.

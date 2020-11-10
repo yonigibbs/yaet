@@ -165,8 +165,7 @@ timerDrop (Game ({ state } as model)) =
             NoChange
 
 
-{-| Moves the currently dropping shape in the supplied direction, if possible. Returns the same tuple as `timerDrop`
-(see it for more details).
+{-| Moves the currently dropping shape in the supplied direction, if possible.
 -}
 moveShape : MoveDirection -> Game -> MoveResult
 moveShape direction (Game ({ state, board } as model)) =
@@ -176,15 +175,11 @@ moveShape direction (Game ({ state, board } as model)) =
                 proposedDroppingShape =
                     { droppingShape | coord = nextCoord direction droppingShape.coord }
             in
-            case ( isValidPosition board proposedDroppingShape, direction ) of
-                ( True, _ ) ->
-                    continueWithNewDroppingShape False proposedDroppingShape model
+            if isValidPosition board proposedDroppingShape then
+                continueWithNewDroppingShape False proposedDroppingShape model
 
-                ( False, Down ) ->
-                    handleDroppingShapeLanded model
-
-                ( False, _ ) ->
-                    NoChange
+            else
+                NoChange
 
         LineRemovalGameState _ ->
             NoChange
