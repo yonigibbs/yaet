@@ -7,7 +7,7 @@ module Game exposing
     , blocks
     , moveShape
     , new
-    , resumeAfterLineRemoval
+    , onLineRemovalAnimationComplete
     , rotateShape
     , shapeGenerated
     , timerDrop
@@ -262,8 +262,8 @@ handleDroppingShapeLanded model =
             NoChange
 
 
-resumeAfterLineRemoval : Game -> Game
-resumeAfterLineRemoval (Game ({ board, nextShape, state } as model)) =
+onLineRemovalAnimationComplete : Game -> Game
+onLineRemovalAnimationComplete (Game ({ board, nextShape, state } as model)) =
     case state of
         LineRemovalGameState { completedRowIndexes, nextDroppingShape } ->
             let

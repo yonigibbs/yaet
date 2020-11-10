@@ -155,16 +155,23 @@ update msg model =
                             )
 
                         HighlightAnimation.Complete ->
-                            let
-                                nextGame =
-                                    case HighlightAnimation.highlightAnimationType currentAnimation of
-                                        HighlightAnimation.ShapeLanding ->
-                                            playingModel.game
+                            case HighlightAnimation.highlightAnimationType currentAnimation of
+                                HighlightAnimation.ShapeLanding ->
+                                    Game.timerDrop playingModel.game |> handleMoveResult playingModel
 
-                                        HighlightAnimation.LineRemoval ->
-                                            Game.resumeAfterLineRemoval playingModel.game
-                            in
-                            ( Playing { playingModel | game = nextGame, highlightAnimation = Nothing }, Cmd.none )
+                                HighlightAnimation.LineRemoval ->
+                                    let
+                                        nextGame =
+                                            Game.onLineRemovalAnimationComplete playingModel.game
+                                    in
+                                    ( Playing
+                                        { playingModel
+                                            | game = nextGame
+                                            , normalBlocks = (Game.blocks nextGame).normal
+                                            , highlightAnimation = Nothing
+                                        }
+                                    , Cmd.none
+                                    )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -369,20 +376,19 @@ subscriptions model =
 
         Playing { game, timerDropDelay, highlightAnimation } ->
             let
-                animationSub =
+                subscription =
                     case highlightAnimation of
                         Just animation ->
-                            [ Sub.map HighlightAnimationMsg <| HighlightAnimation.subscriptions animation ]
+                            Sub.map HighlightAnimationMsg <| HighlightAnimation.subscriptions animation
 
                         _ ->
-                            []
+                            Time.every (toFloat timerDropDelay) <| always TimerDropDelayElapsed
             in
             -- TODO: in some cases we don't want timerDropDelay, e.g. when animating?
             Sub.batch <|
-                [ Time.every (toFloat timerDropDelay) <| always TimerDropDelayElapsed
-                , Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
+                [ Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
+                , subscription
                 ]
-                    ++ animationSub
 
         Ended ->
             Sub.none
