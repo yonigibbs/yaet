@@ -128,7 +128,7 @@ type MoveResult
     = NoChange
     | Continue { game : Game, newShapeRequested : Bool }
     | RowBeingRemoved { game : Game }
-    | EndGame -- TODO: think more about this - need to report board maybe, so it can still be rendered?
+    | GameOver { game : Game }
 
 
 
@@ -180,20 +180,20 @@ second or so). Drops the current shape one row if possible, otherwise treats it 
 shape as the new dropping shape.
 -}
 timerDrop : Game -> MoveResult
-timerDrop (Game ({ state } as model)) =
+timerDrop ((Game ({ state, board } as model)) as game) =
     case state of
         RegularGameState { droppingShape } ->
             let
                 proposedDroppingShape =
                     { droppingShape | coord = nextCoord Down droppingShape.coord }
             in
-            if isValidPosition model.board proposedDroppingShape then
+            if isValidPosition board proposedDroppingShape then
                 -- It's valid for the currently dropping shape to go down by one row, so just do that.
-                continueWithNewDroppingShape False proposedDroppingShape model
+                continueWithUpdatedDroppingShape False proposedDroppingShape model
 
             else
                 -- It's not valid for the currently dropping shape to go down by one row, so it must have landed.
-                handleDroppingShapeLanded model
+                handleDroppingShapeLanded game
 
         RowRemovalGameState _ ->
             NoChange
@@ -210,7 +210,7 @@ moveShape direction (Game ({ state, board } as model)) =
                     { droppingShape | coord = nextCoord direction droppingShape.coord }
             in
             if isValidPosition board proposedDroppingShape then
-                continueWithNewDroppingShape False proposedDroppingShape model
+                continueWithUpdatedDroppingShape False proposedDroppingShape model
 
             else
                 NoChange
@@ -230,7 +230,7 @@ rotateShape (Game ({ state, board } as model)) direction =
                     { droppingShape | shape = Shape.rotate direction droppingShape.shape }
             in
             if isValidPosition board proposedDroppingShape then
-                continueWithNewDroppingShape False proposedDroppingShape model
+                continueWithUpdatedDroppingShape False proposedDroppingShape model
 
             else
                 NoChange
@@ -242,11 +242,11 @@ rotateShape (Game ({ state, board } as model)) direction =
 {-| Handles the case when the dropping shape has landed: appends its blocks to the board and takes the next item off the
 buffer to be the new "next" shape.
 -}
-handleDroppingShapeLanded : Model -> MoveResult
-handleDroppingShapeLanded model =
+handleDroppingShapeLanded : Game -> MoveResult
+handleDroppingShapeLanded (Game ({ shapeBuffer, state, board, nextShape } as model)) =
     -- We can only do this we have a shape in the buffer, as we need to take a shape out the buffer and make it the new
     -- "next" shape.
-    case ( model.shapeBuffer, model.state ) of
+    case ( shapeBuffer, state ) of
         ( firstInBuffer :: restOfBuffer, RegularGameState { droppingShape } ) ->
             -- We have one, so we can use it:
             let
@@ -254,7 +254,7 @@ handleDroppingShapeLanded model =
                     Shape.data droppingShape.shape
 
                 nextBoard =
-                    Board.append model.board colour (calcShapeBlocksBoardCoords droppingShape)
+                    Board.append board colour (calcShapeBlocksBoardCoords droppingShape)
 
                 completedRows =
                     Board.completedRows nextBoard
@@ -262,13 +262,18 @@ handleDroppingShapeLanded model =
                 nextModel =
                     { model | board = nextBoard, nextShape = firstInBuffer, shapeBuffer = restOfBuffer }
 
-                nextDroppingShape =
-                    initDroppingShape model.nextShape
+                newDroppingShape =
+                    initDroppingShape nextShape
             in
             case completedRows of
                 [] ->
-                    -- No completed rows - continue as normal
-                    continueWithNewDroppingShape True nextDroppingShape nextModel
+                    -- No completed rows - continue as normal, but only if the new dropping shape is valid at its
+                    -- proposed position: if not, the game is over.
+                    if isValidPosition nextBoard newDroppingShape then
+                        continueWithUpdatedDroppingShape True newDroppingShape nextModel
+
+                    else
+                        GameOver { game = Game { model | board = nextBoard } }
 
                 completedRowIndexes ->
                     RowBeingRemoved
@@ -278,7 +283,7 @@ handleDroppingShapeLanded model =
                                     | state =
                                         RowRemovalGameState
                                             { completedRowIndexes = completedRowIndexes
-                                            , nextDroppingShape = nextDroppingShape
+                                            , nextDroppingShape = newDroppingShape
                                             }
                                 }
                         }
@@ -288,8 +293,8 @@ handleDroppingShapeLanded model =
             NoChange
 
 
-continueWithNewDroppingShape : Bool -> DroppingShape -> Model -> MoveResult
-continueWithNewDroppingShape newShapeRequested droppingShape model =
+continueWithUpdatedDroppingShape : Bool -> DroppingShape -> Model -> MoveResult
+continueWithUpdatedDroppingShape newShapeRequested droppingShape model =
     Continue
         { game = Game { model | state = RegularGameState { droppingShape = droppingShape } }
         , newShapeRequested = newShapeRequested

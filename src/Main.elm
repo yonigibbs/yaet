@@ -47,7 +47,7 @@ type Model
     = Instructions -- No game being played - showing the user the instructions
     | Initialising -- Game being initialised (random shapes being generated)
     | Playing PlayingModel -- Game is currently being played
-    | Ended -- Game has ended (TODO: add data here for rendering end state of game?)
+    | GameOver Game -- Game has ended
 
 
 {-| When the game is in the `Playing` state, this is the data associated with it.
@@ -109,7 +109,7 @@ update msg model =
         ( Instructions, StartGameRequested ) ->
             initialiseGame
 
-        ( Ended, StartGameRequested ) ->
+        ( GameOver _, StartGameRequested ) ->
             initialiseGame
 
         ( _, StartGameRequested ) ->
@@ -234,8 +234,8 @@ handleMoveResult currentPlayingModel moveResult =
             in
             startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.RowRemoval [ generateRandomShape ]
 
-        Game.EndGame ->
-            Debug.todo "Implement game end"
+        Game.GameOver { game } ->
+            ( GameOver game, Cmd.none )
 
 
 {-| Starts a new animation.
@@ -388,7 +388,10 @@ view : Model -> Html Msg
 view model =
     case model of
         Instructions ->
-            Html.div [] [ Html.text "TODO: Instructions", Html.button [ Html.Events.onClick StartGameRequested ] [ Html.text "Start game" ] ]
+            Html.div []
+                [ Html.div [] [ Html.text "TODO: Instructions" ]
+                , Html.div [] [ startGameButton ]
+                ]
 
         Initialising ->
             Html.text "TODO: Initialising"
@@ -396,8 +399,20 @@ view model =
         Playing { normalBlocks, highlightAnimation } ->
             GameView.view normalBlocks highlightAnimation
 
-        Ended ->
-            Html.text "TODO: Game ended"
+        GameOver game ->
+            -- TODO: the below assumes there are no highlighted blocks when the game ends, but the type system doesn't
+            -- currently guarantee that (Game.handleDroppingShapeLanded can result in GameOver even when its state is
+            -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
+            Html.div []
+                [ Html.div [] [ Html.text "TODO: Game over" ]
+                , Html.div [] [ GameView.view (Game.blocks game).normal Nothing ]
+                , Html.div [] [ startGameButton ]
+                ]
+
+
+startGameButton : Html Msg
+startGameButton =
+    Html.button [ Html.Events.onClick StartGameRequested ] [ Html.text "Start game" ]
 
 
 
@@ -426,10 +441,10 @@ subscriptions model =
                             Time.every (toFloat timerDropDelay) <| always TimerDropDelayElapsed
             in
             -- TODO: in some cases we don't want timerDropDelay, e.g. when animating?
-            Sub.batch <|
+            Sub.batch
                 [ Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
                 , subscription
                 ]
 
-        Ended ->
+        GameOver _ ->
             Sub.none
