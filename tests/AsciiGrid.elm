@@ -75,7 +75,7 @@ build asciiGrid config =
 
 {-| The configuration dictionary to supply to `AsciiGrid.Build` which maps each character to its corresponding colour.
 -}
-blockColourConfig : Dict.Dict Char BlockColour
+blockColourConfig : Dict Char BlockColour
 blockColourConfig =
     Dict.fromList
         [ ( 'b', BlockColour.Blue )

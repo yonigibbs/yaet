@@ -73,8 +73,8 @@ grid =
                 |> List.map (\index -> index |> toFloat |> (*) cellSize |> SvgT.px)
                 |> List.map drawLine
     in
-    drawLines Board.xCellCount (\x -> gridLine x (SvgT.px 0) x boardSizeY)
-        ++ drawLines Board.yCellCount (\y -> gridLine (SvgT.px 0) y boardSizeX y)
+    drawLines Board.colCount (\x -> gridLine x (SvgT.px 0) x boardSizeY)
+        ++ drawLines Board.rowCount (\y -> gridLine (SvgT.px 0) y boardSizeX y)
 
 
 gridLine : SvgT.Length -> SvgT.Length -> SvgT.Length -> SvgT.Length -> Svg msg
@@ -127,7 +127,7 @@ drawBlock coord lightColour darkColour =
 -}
 coordToGridPos : Coord -> ( Float, Float )
 coordToGridPos ( x, y ) =
-    ( toFloat x * cellSize, Board.yCellCount - y - 1 |> toFloat |> (*) cellSize )
+    ( toFloat x * cellSize, Board.rowCount - y - 1 |> toFloat |> (*) cellSize )
 
 
 {-| The width and height of each cell, in pixels.
@@ -141,11 +141,11 @@ cellSize =
 -}
 boardSizeX : SvgT.Length
 boardSizeX =
-    cellSize * toFloat Board.xCellCount |> SvgT.px
+    cellSize * toFloat Board.colCount |> SvgT.px
 
 
 {-| The vertical size of the board, in pixels.
 -}
 boardSizeY : SvgT.Length
 boardSizeY =
-    cellSize * toFloat Board.yCellCount |> SvgT.px
+    cellSize * toFloat Board.rowCount |> SvgT.px

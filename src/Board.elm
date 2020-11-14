@@ -2,12 +2,12 @@ module Board exposing
     ( Board
     , append
     , areCellsAvailable
+    , colCount
     , completedRows
     , emptyBoard
     , occupiedCells
     , removeRows
-    , xCellCount
-    , yCellCount
+    , rowCount
     )
 
 {-| This module contains functionality related to representing a board. This is a 10x20 grid with cells, which can either
@@ -43,14 +43,14 @@ type alias Row =
 
 emptyRow : Row
 emptyRow =
-    Array.repeat xCellCount Empty
+    Array.repeat colCount Empty
 
 
 {-| Gets the empty board to use at the start of the game.
 -}
 emptyBoard : Board
 emptyBoard =
-    Board <| Array.repeat yCellCount emptyRow
+    Board <| Array.repeat rowCount emptyRow
 
 
 {-| Gets a list of all the occupied cells in the supplied board.
@@ -112,7 +112,7 @@ areCellsAvailable (Board board) coords =
     in
     -- TODO: If there are multiple cells in the same row, this will get that row from the board's array multiple times:
     -- this could be optimised. Might increase code complexity, and optimisation will probably be negligible. Investigate.
-    List.all (\( x, y ) -> x >= 0 && x < xCellCount && y >= 0 && y < yCellCount && isCellFree ( x, y )) coords
+    List.all (\( x, y ) -> x >= 0 && x < colCount && y >= 0 && y < rowCount && isCellFree ( x, y )) coords
 
 
 {-| Gets a list of the indexes of the completed rows, if any.
@@ -169,13 +169,13 @@ append (Board board) colour coords =
     List.foldl appendCell board coords |> Board
 
 
-{-| The size of the grid along its x-axis, i.e. how wide the board is, counted in the number of cells.
+{-| The number of columns in the board.
 -}
-xCellCount =
+colCount =
     10
 
 
-{-| The size of the grid along its y-axis, i.e. how tall the board is, counted in the number of cells.
+{-| The number of rows in the board.
 -}
-yCellCount =
+rowCount =
     20

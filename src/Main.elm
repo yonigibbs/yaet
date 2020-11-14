@@ -134,7 +134,7 @@ update msg model =
             ( model, Cmd.none )
 
         ( Playing playingModel, RotateShapeRequested direction ) ->
-            Game.rotateShape playingModel.game direction |> handleMoveResult playingModel
+            Game.rotateShape direction playingModel.game |> handleMoveResult playingModel
 
         ( _, RotateShapeRequested _ ) ->
             ( model, Cmd.none )

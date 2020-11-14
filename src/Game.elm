@@ -163,10 +163,10 @@ initDroppingShape shape =
             Shape.data shape |> .gridSize
 
         x =
-            ((toFloat Board.xCellCount / 2) - (toFloat shapeGridSize / 2)) |> floor
+            ((toFloat Board.colCount / 2) - (toFloat shapeGridSize / 2)) |> floor
 
         y =
-            Board.yCellCount - shapeGridSize
+            Board.rowCount - shapeGridSize
     in
     { shape = shape, coord = ( x, y ) }
 
@@ -221,8 +221,8 @@ moveShape direction (Game ({ state, board } as model)) =
 
 {-| Rotates the currently dropping shape in the supplied direction, if possible.
 -}
-rotateShape : Game -> Shape.RotationDirection -> MoveResult
-rotateShape (Game ({ state, board } as model)) direction =
+rotateShape : Shape.RotationDirection -> Game -> MoveResult
+rotateShape direction (Game ({ state, board } as model)) =
     case state of
         RegularGameState { droppingShape } ->
             let
