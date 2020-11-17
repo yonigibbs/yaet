@@ -11,12 +11,14 @@ Current state: WIP.
 - [x] Handle arrow keys to rotate pieces
 - [x] Make lines disappear when one completed
 - [x] When using down arrow to drop piece, if it lands, don't immed start dropping down next piece quickly (possibly
-by adding animation on drop?)
+      by adding animation on drop?)
 - [x] Increase speed as lines disappear
 - [x] Add animation for lines disappearing (fade out? flash?) and maybe also shapes landing?
 - [x] Calculate when game over
 - [x] Create unit tests for the Game module
-- [ ] When rotating pieces, if rotation means one of the blocks goes off edge, move piece back into board?
+- [x] When rotating pieces, if rotation means one of the blocks goes off edge, move piece back into board?
+- [ ] Constantly rotating when at the lowest possible position restarts the timer drop so user can stop the game from
+      progressing at all by just holding down the rotate key.
 - [ ] Improve playability wrt long holds of buttons
 - [ ] Add key binding for dropping current piece immediately (space bar?)
 - [ ] GitHub actions for automatically running unit tests?

@@ -11,7 +11,7 @@ import Coord exposing (Coord)
 import Dict exposing (Dict)
 import Expect exposing (Expectation)
 import Game exposing (Game)
-import Shape
+import Shape exposing (Shape)
 import ShapeUtils
 import Test exposing (Test, describe, test)
 
@@ -21,7 +21,7 @@ suite =
     describe "Game"
         [ test "Drops initial shape two rows after two timer drop events." <|
             \_ ->
-                defaultInitialGameState
+                newGame defaultInitialGameState
                     |> repeat 2 Game.timerDrop
                     |> expectGame
                         (ExpectedGame
@@ -36,7 +36,7 @@ suite =
                         )
         , test "Highlights landed shape after moving initial shape to left edge then letting it drop to bottom." <|
             \_ ->
-                defaultInitialGameState
+                newGame defaultInitialGameState
                     |> repeat 3 (Game.moveShape Game.Left)
                     |> repeat 18 Game.timerDrop
                     |> expectGame
@@ -50,7 +50,7 @@ suite =
                         )
         , test "Next shape appears after shape drops to bottom (and bottom shape no longer highlighted)." <|
             \_ ->
-                defaultInitialGameState
+                newGame defaultInitialGameState
                     |> repeat 3 (Game.moveShape Game.Left)
                     |> repeat 19 Game.timerDrop
                     |> expectGame
@@ -82,7 +82,7 @@ suite =
                         )
         , test "Completed row highlighted." <|
             \_ ->
-                defaultInitialGameState
+                newGame defaultInitialGameState
                     -- Move blue L to the left (will first first three columns)
                     |> repeat 3 (Game.moveShape Game.Left)
                     -- Drop it the 18 rows required to get it to the bottom, then timer drop to make next shape appear.
@@ -118,7 +118,7 @@ suite =
                         )
         , test "New shape added after completed row removed." <|
             \_ ->
-                defaultInitialGameState
+                newGame defaultInitialGameState
                     -- Repeat same steps as previous test, then update the game to make the completed row disappear, and
                     -- the next shape appear.
                     |> repeat 3 (Game.moveShape Game.Left)
@@ -167,13 +167,55 @@ suite =
                         )
         , test "Does not move shape off board if user tries to move it too much." <|
             \_ ->
-                defaultInitialGameState
+                newGame defaultInitialGameState
                     |> repeat 20 (Game.moveShape Game.Left)
                     |> expectGame
                         (ExpectedGame
                             { game = buildAsciiGame BottomPadding """
                                 --b-------
                                 bbb-------
+                                """
+                            , rowRemoval = NoRowRemoval
+                            }
+                        )
+        , test "Moves L-shape back into play if rotation would cause it to move off the side." <|
+            \_ ->
+                -- Start off with the normal L-shape on its back
+                newGame defaultInitialGameState
+                    -- Rotate it once so it's the right way up
+                    |> progressGame (Game.rotateShape Shape.Clockwise)
+                    -- Move it all the way to the left
+                    |> repeat 5 (Game.moveShape Game.Left)
+                    -- Rotate it clockwise again: naturally this will mean the shape is now off the board so this
+                    -- wouldn't be allowed, but we have logic to "shift" it back into place (i.e. go back one cell to
+                    -- the right).
+                    |> progressGame (Game.rotateShape Shape.Clockwise)
+                    |> expectGame
+                        (ExpectedGame
+                            { game = buildAsciiGame BottomPadding """
+                                ----------
+                                bbb-------
+                                b---------
+                                """
+                            , rowRemoval = NoRowRemoval
+                            }
+                        )
+        , test "Moves line shape back into play if rotation would cause it to move off the side." <|
+            \_ ->
+                -- Same as previous test but with line: turn it so it's vertical then move it all the way (to the right
+                -- this time), then rotate it.
+                defaultInitialGameState
+                    |> withInitialShape (ShapeUtils.getShape BlockColour.Blue ShapeUtils.Line)
+                    |> newGame
+                    |> progressGame (Game.rotateShape Shape.Clockwise)
+                    |> repeat 5 (Game.moveShape Game.Right)
+                    |> progressGame (Game.rotateShape Shape.Clockwise)
+                    |> expectGame
+                        (ExpectedGame
+                            { game = buildAsciiGame BottomPadding """
+                                ----------
+                                ----------
+                                ------bbbb
                                 """
                             , rowRemoval = NoRowRemoval
                             }
@@ -301,6 +343,13 @@ buildAsciiGame padType board =
         |> AsciiGame
 
 
+{-| Starts a new game with the supplied initialisation info, and returns a `GameState` record ready to start the tests.
+-}
+newGame : Game.InitialisationInfo -> GameState
+newGame initialisationInfo =
+    { game = Game.new initialisationInfo, rowRemoval = NoRowRemoval }
+
+
 {-| The default initial state to use when creating a new game. The initial shapes allow a full row to be completed with
 the first four shapes. The shapes in order are:
 
@@ -313,23 +362,23 @@ the first four shapes. The shapes in order are:
   - Red L-mirror-image
 
 -}
-defaultInitialGameState : GameState
+defaultInitialGameState : Game.InitialisationInfo
 defaultInitialGameState =
-    let
-        game =
-            Game.new
-                { initialShape = ShapeUtils.getShape BlockColour.Blue ShapeUtils.Ell
-                , nextShape = ShapeUtils.getShape BlockColour.Red ShapeUtils.Square
-                , shapeBuffer =
-                    [ ShapeUtils.getShape BlockColour.Yellow ShapeUtils.Line
-                    , ShapeUtils.getShape BlockColour.Green ShapeUtils.HalfPlus
-                    , ShapeUtils.getShape BlockColour.Orange ShapeUtils.Zed
-                    , ShapeUtils.getShape BlockColour.Purple ShapeUtils.ZedMirror
-                    , ShapeUtils.getShape BlockColour.Red ShapeUtils.EllMirror
-                    ]
-                }
-    in
-    { game = game, rowRemoval = NoRowRemoval }
+    { initialShape = ShapeUtils.getShape BlockColour.Blue ShapeUtils.Ell
+    , nextShape = ShapeUtils.getShape BlockColour.Red ShapeUtils.Square
+    , shapeBuffer =
+        [ ShapeUtils.getShape BlockColour.Yellow ShapeUtils.Line
+        , ShapeUtils.getShape BlockColour.Green ShapeUtils.HalfPlus
+        , ShapeUtils.getShape BlockColour.Orange ShapeUtils.Zed
+        , ShapeUtils.getShape BlockColour.Purple ShapeUtils.ZedMirror
+        , ShapeUtils.getShape BlockColour.Red ShapeUtils.EllMirror
+        ]
+    }
+
+
+withInitialShape : Shape -> Game.InitialisationInfo -> Game.InitialisationInfo
+withInitialShape shape initialisationInfo =
+    { initialisationInfo | initialShape = shape }
 
 
 {-| Progresses the game by executing some function that returns a `MoveResult` (e.g. `Game.timerDrop` or

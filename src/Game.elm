@@ -219,24 +219,48 @@ moveShape direction (Game ({ state, board } as model)) =
             NoChange
 
 
-{-| Rotates the currently dropping shape in the supplied direction, if possible.
+{-| Rotates the currently dropping shape in the supplied direction, if possible. If this would mean that the shape moves
+off the board to either side, then the shape is "shifted back" onto the board if this is possible.
 -}
 rotateShape : Shape.RotationDirection -> Game -> MoveResult
 rotateShape direction (Game ({ state, board } as model)) =
     case state of
         RegularGameState { droppingShape } ->
-            let
-                proposedDroppingShape =
-                    { droppingShape | shape = Shape.rotate direction droppingShape.shape }
-            in
-            if isValidPosition board proposedDroppingShape then
-                continueWithUpdatedDroppingShape False proposedDroppingShape model
+            case nextValidRotatedDroppingShape { droppingShape | shape = Shape.rotate direction droppingShape.shape } board of
+                Just rotatedShape ->
+                    continueWithUpdatedDroppingShape False rotatedShape model
 
-            else
-                NoChange
+                Nothing ->
+                    NoChange
 
         RowRemovalGameState _ ->
             NoChange
+
+
+{-| Gets the next valid position for a rotate shape, if one exists. Moves the shape back onto the board if its rotation
+has meant that it's now off either side.
+-}
+nextValidRotatedDroppingShape : DroppingShape -> Board -> Maybe DroppingShape
+nextValidRotatedDroppingShape droppingShape board =
+    let
+        shapeCoords =
+            calcShapeBlocksBoardCoords droppingShape
+    in
+    if List.any (\( x, _ ) -> x < 0) shapeCoords then
+        -- Shape is off the left edge of the board: move it right one cell then try again.
+        nextValidRotatedDroppingShape { droppingShape | coord = nextCoord Right droppingShape.coord } board
+
+    else if List.any (\( x, _ ) -> x >= Board.colCount) shapeCoords then
+        -- Shape is off the right edge of the board: move it left one cell then try again.
+        nextValidRotatedDroppingShape { droppingShape | coord = nextCoord Left droppingShape.coord } board
+
+    else if Board.areCellsAvailable board shapeCoords then
+        -- Shape is on the board and valid.
+        Just droppingShape
+
+    else
+        -- Shape is on the board but in an invalid position.
+        Nothing
 
 
 {-| Handles the case when the dropping shape has landed: appends its blocks to the board and takes the next item off the
