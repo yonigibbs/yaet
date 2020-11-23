@@ -1,5 +1,5 @@
-module Board exposing
-    ( Board
+module GameBoard exposing
+    ( GameBoard
     , append
     , areCellsAvailable
     , colCount
@@ -10,9 +10,10 @@ module Board exposing
     , rowCount
     )
 
-{-| This module contains functionality related to representing a board. This is a 10x20 grid with cells, which can either
-be empty or have a block in them. Importantly, the board represents only _landed_ blocks: the shape which is currently
-dropping (and which is rendered onto the grid represented by the board), is _not_ part of the data in the board.
+{-| This module contains functionality related to representing a board during gameplay. This is a 10x20 grid with cells,
+which can either be empty or have a block in them. Importantly, the board represents only _landed_ blocks: the shape
+which is currently dropping (and which is rendered onto the grid represented by the board), is _not_ part of the data in
+the board.
 -}
 
 import Array exposing (Array)
@@ -24,8 +25,8 @@ import Coord exposing (Coord)
 Importantly, the board represents only _landed_ blocks: the shape which is currently dropping (and which is rendered
 onto the grid represented by the board), is _not_ part of the data in the board.
 -}
-type Board
-    = Board (Array Row)
+type GameBoard
+    = GameBoard (Array Row)
 
 
 {-| A cell in the board: either `Empty` or `Occupied`, in which case it has a colour associated with it.
@@ -48,9 +49,9 @@ emptyRow =
 
 {-| Gets the empty board to use at the start of the game.
 -}
-emptyBoard : Board
+emptyBoard : GameBoard
 emptyBoard =
-    Board <| Array.repeat rowCount emptyRow
+    GameBoard <| Array.repeat rowCount emptyRow
 
 
 {-| Gets a list of all the occupied cells in the supplied board.
@@ -59,8 +60,8 @@ Returns a list of tuples, where the first value in the tuple is the block's coor
 colour.
 
 -}
-occupiedCells : Board -> List ( Coord, BlockColour )
-occupiedCells (Board board) =
+occupiedCells : GameBoard -> List ( Coord, BlockColour )
+occupiedCells (GameBoard board) =
     let
         rowPopulatedCells : Int -> Row -> List ( Coord, BlockColour )
         rowPopulatedCells y row =
@@ -100,8 +101,8 @@ isOccupiedCell =
 
 {-| Checks whether all the supplied coordinates are free on the supplied board (and within its legal coordinates).
 -}
-areCellsAvailable : Board -> List Coord -> Bool
-areCellsAvailable (Board board) coords =
+areCellsAvailable : GameBoard -> List Coord -> Bool
+areCellsAvailable (GameBoard board) coords =
     let
         isCellFree : Coord -> Bool
         isCellFree ( x, y ) =
@@ -117,8 +118,8 @@ areCellsAvailable (Board board) coords =
 
 {-| Gets a list of the indexes of the completed rows, if any.
 -}
-completedRows : Board -> List Int
-completedRows (Board rows) =
+completedRows : GameBoard -> List Int
+completedRows (GameBoard rows) =
     rows
         |> Array.indexedMap (\index row -> ( index, Array.toList row |> List.all isOccupiedCell ))
         |> Array.filter (\( _, isCompleted ) -> isCompleted)
@@ -128,8 +129,8 @@ completedRows (Board rows) =
 
 {-| Removes the lines at the supplied indexes (adding new empty
 -}
-removeRows : Board -> List Int -> Board
-removeRows (Board rows) indexes =
+removeRows : GameBoard -> List Int -> GameBoard
+removeRows (GameBoard rows) indexes =
     let
         keptRows =
             Array.toIndexedList rows
@@ -146,14 +147,14 @@ removeRows (Board rows) indexes =
         newEmptyRows =
             Array.repeat (List.length indexes) emptyRow
     in
-    Board <| Array.append keptRows newEmptyRows
+    GameBoard <| Array.append keptRows newEmptyRows
 
 
 {-| Appends the supplied coordinates as occupied cells onto the supplied board. Note that this doesn't automatically
 removed any newly completed lines.
 -}
-append : Board -> BlockColour -> List Coord -> Board
-append (Board board) colour coords =
+append : GameBoard -> BlockColour -> List Coord -> GameBoard
+append (GameBoard board) colour coords =
     let
         appendCell : Coord -> Array Row -> Array Row
         appendCell ( x, y ) rows =
@@ -166,16 +167,18 @@ append (Board board) colour coords =
                 -- If any of the actions above failed, just return the originally supplied board.
                 |> Maybe.withDefault rows
     in
-    List.foldl appendCell board coords |> Board
-
-
-{-| The number of columns in the board.
--}
-colCount =
-    10
+    List.foldl appendCell board coords |> GameBoard
 
 
 {-| The number of rows in the board.
 -}
+rowCount : Int
 rowCount =
     20
+
+
+{-| The number of columns in the board.
+-}
+colCount : Int
+colCount =
+    10

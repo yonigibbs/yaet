@@ -7,18 +7,22 @@ the game accordingly.
 
 import Array exposing (Array)
 import BlockColour exposing (BlockColour)
+import BoardView
 import Browser
 import Browser.Events
 import Coord exposing (Coord)
+import Element exposing (Element)
+import Element.Background
+import Element.Input
 import Game exposing (Game)
-import GameView
+import GameBoard
 import HighlightAnimation
 import Html exposing (Html)
-import Html.Events
 import Keyboard
 import Random
 import Shape exposing (Shape)
 import Time
+import WelcomeScreen
 
 
 
@@ -36,7 +40,7 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Instructions, Cmd.none )
+    ( Welcome, Cmd.none )
 
 
 
@@ -44,7 +48,7 @@ init _ =
 
 
 type Model
-    = Instructions -- No game being played - showing the user the instructions
+    = Welcome -- No game being played - showing the user some welcome/introductory info
     | Initialising -- Game being initialised (random shapes being generated)
     | Playing PlayingModel -- Game is currently being played
     | GameOver Game -- Game has ended
@@ -106,7 +110,7 @@ keyMessages =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model, msg ) of
-        ( Instructions, StartGameRequested ) ->
+        ( Welcome, StartGameRequested ) ->
             initialiseGame
 
         ( GameOver _, StartGameRequested ) ->
@@ -386,33 +390,49 @@ generateRandomShape =
 
 view : Model -> Html Msg
 view model =
-    case model of
-        Instructions ->
-            Html.div []
-                [ Html.div [] [ Html.text "TODO: Instructions" ]
-                , Html.div [] [ startGameButton ]
-                ]
+    let
+        contents : Element Msg
+        contents =
+            case model of
+                Welcome ->
+                    WelcomeScreen.view
 
-        Initialising ->
-            Html.text "TODO: Initialising"
+                Initialising ->
+                    Element.text "TODO: Initialising"
 
-        Playing { normalBlocks, highlightAnimation } ->
-            GameView.view normalBlocks highlightAnimation
+                Playing { normalBlocks, highlightAnimation } ->
+                    Element.html <| BoardView.view boardViewConfig normalBlocks highlightAnimation
 
-        GameOver game ->
-            -- TODO: the below assumes there are no highlighted blocks when the game ends, but the type system doesn't
-            -- currently guarantee that (Game.handleDroppingShapeLanded can result in GameOver even when its state is
-            -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
-            Html.div []
-                [ Html.div [] [ Html.text "TODO: Game over" ]
-                , Html.div [] [ GameView.view (Game.blocks game).normal Nothing ]
-                , Html.div [] [ startGameButton ]
-                ]
+                GameOver game ->
+                    -- TODO: the below assumes there are no highlighted blocks when the game ends, but the type system doesn't
+                    -- currently guarantee that (Game.handleDroppingShapeLanded can result in GameOver even when its state is
+                    -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
+                    Element.column []
+                        [ Element.text "TODO: Game over"
+                        , Element.html <| BoardView.view boardViewConfig (Game.blocks game).normal Nothing
+                        , startGameButton
+                        ]
+    in
+    Element.layout [] <|
+        Element.column
+            [ Element.width Element.fill
+            , Element.height Element.fill
+            , Element.centerX
+            , Element.rgb255 30 30 30 |> Element.Background.color
+            ]
+            [ contents ]
 
 
-startGameButton : Html Msg
+{-| The configuration required to render the game.
+-}
+boardViewConfig : BoardView.Config
+boardViewConfig =
+    { cellSize = 30, rowCount = GameBoard.rowCount, colCount = GameBoard.colCount }
+
+
+startGameButton : Element Msg
 startGameButton =
-    Html.button [ Html.Events.onClick StartGameRequested ] [ Html.text "Start game" ]
+    Element.Input.button [] { onPress = Just StartGameRequested, label = Element.text "Start game" }
 
 
 
@@ -422,7 +442,7 @@ startGameButton =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
-        Instructions ->
+        Welcome ->
             Sub.none
 
         Initialising ->

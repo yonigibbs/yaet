@@ -33,8 +33,8 @@ predictable and time-independent fashion in tests.
 -}
 
 import BlockColour exposing (BlockColour)
-import Board exposing (Board)
 import Coord exposing (Coord)
+import GameBoard exposing (GameBoard)
 import Shape exposing (Shape)
 
 
@@ -61,7 +61,7 @@ type Game
 {-| Information about the currently playing game.
 -}
 type alias Model =
-    { board : Board -- The current board (only landed blocks, not the currently dropping shape).
+    { board : GameBoard -- The current board (only landed blocks, not the currently dropping shape).
     , state : GameState -- The current state (see `GameState` for more details).
     , nextShape : Shape -- The next shape to use as the dropping shape once the current one lands.
     , shapeBuffer : List Shape -- Buffer of available random shapes. See comments on this module for details.
@@ -147,7 +147,7 @@ type alias InitialisationInfo =
 new : InitialisationInfo -> Game
 new { initialShape, nextShape, shapeBuffer } =
     Game
-        { board = Board.emptyBoard
+        { board = GameBoard.emptyBoard
         , state = RegularGameState { droppingShape = initDroppingShape initialShape }
         , nextShape = nextShape
         , shapeBuffer = shapeBuffer
@@ -163,10 +163,10 @@ initDroppingShape shape =
             Shape.data shape |> .gridSize
 
         x =
-            ((toFloat Board.colCount / 2) - (toFloat shapeGridSize / 2)) |> floor
+            ((toFloat GameBoard.colCount / 2) - (toFloat shapeGridSize / 2)) |> floor
 
         y =
-            Board.rowCount - shapeGridSize
+            GameBoard.rowCount - shapeGridSize
     in
     { shape = shape, coord = ( x, y ) }
 
@@ -240,7 +240,7 @@ rotateShape direction (Game ({ state, board } as model)) =
 {-| Gets the next valid position for a rotate shape, if one exists. Moves the shape back onto the board if its rotation
 has meant that it's now off either side.
 -}
-nextValidRotatedDroppingShape : DroppingShape -> Board -> Maybe DroppingShape
+nextValidRotatedDroppingShape : DroppingShape -> GameBoard -> Maybe DroppingShape
 nextValidRotatedDroppingShape droppingShape board =
     let
         shapeCoords =
@@ -250,11 +250,11 @@ nextValidRotatedDroppingShape droppingShape board =
         -- Shape is off the left edge of the board: move it right one cell then try again.
         nextValidRotatedDroppingShape { droppingShape | coord = nextCoord Right droppingShape.coord } board
 
-    else if List.any (\( x, _ ) -> x >= Board.colCount) shapeCoords then
+    else if List.any (\( x, _ ) -> x >= GameBoard.colCount) shapeCoords then
         -- Shape is off the right edge of the board: move it left one cell then try again.
         nextValidRotatedDroppingShape { droppingShape | coord = nextCoord Left droppingShape.coord } board
 
-    else if Board.areCellsAvailable board shapeCoords then
+    else if GameBoard.areCellsAvailable board shapeCoords then
         -- Shape is on the board and valid.
         Just droppingShape
 
@@ -278,10 +278,10 @@ handleDroppingShapeLanded (Game ({ shapeBuffer, state, board, nextShape } as mod
                     Shape.data droppingShape.shape
 
                 nextBoard =
-                    Board.append board colour (calcShapeBlocksBoardCoords droppingShape)
+                    GameBoard.append board colour (calcShapeBlocksBoardCoords droppingShape)
 
                 completedRows =
-                    Board.completedRows nextBoard
+                    GameBoard.completedRows nextBoard
 
                 nextModel =
                     { model | board = nextBoard, nextShape = firstInBuffer, shapeBuffer = restOfBuffer }
@@ -334,7 +334,7 @@ onRowRemovalAnimationComplete (Game ({ board, nextShape, state } as model)) =
         RowRemovalGameState { completedRowIndexes, nextDroppingShape } ->
             let
                 nextBoard =
-                    Board.removeRows board completedRowIndexes
+                    GameBoard.removeRows board completedRowIndexes
             in
             Game
                 { model
@@ -375,9 +375,9 @@ nextCoord direction ( x, y ) =
 
 {-| Calculates whether the supplied dropping shape is valid to be at its specified coordinates, for the given board.
 -}
-isValidPosition : Board -> DroppingShape -> Bool
+isValidPosition : GameBoard -> DroppingShape -> Bool
 isValidPosition board droppingShape =
-    calcShapeBlocksBoardCoords droppingShape |> Board.areCellsAvailable board
+    calcShapeBlocksBoardCoords droppingShape |> GameBoard.areCellsAvailable board
 
 
 {-| Calculates the coordinates of the blocks of the supplied dropping shape on board. The dropping shape's blocks'
@@ -412,15 +412,15 @@ blocks (Game { board, state }) =
                     isValidPosition board { droppingShape | coord = nextCoord Down droppingShape.coord }
             in
             if canDropMore then
-                { normal = Board.occupiedCells board ++ droppingShapeBlocks, highlighted = [] }
+                { normal = GameBoard.occupiedCells board ++ droppingShapeBlocks, highlighted = [] }
 
             else
-                { normal = Board.occupiedCells board, highlighted = droppingShapeBlocks }
+                { normal = GameBoard.occupiedCells board, highlighted = droppingShapeBlocks }
 
         RowRemovalGameState { completedRowIndexes } ->
             let
                 ( completedRowCells, normalCells ) =
-                    Board.occupiedCells board
+                    GameBoard.occupiedCells board
                         |> List.partition (\( ( _, cellRowIndex ), _ ) -> List.member cellRowIndex completedRowIndexes)
             in
             { normal = normalCells, highlighted = completedRowCells }
