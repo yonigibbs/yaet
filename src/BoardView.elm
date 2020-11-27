@@ -1,6 +1,6 @@
-module BoardView exposing (Config, view)
+module BoardView exposing (BorderStyle(..), Config, view)
 
-{-| This module is responsible for rendering a board (typically during a game, but also used in the welcome scree).
+{-| This module is responsible for rendering a board (typically during a game, but also used in the welcome screen).
 
 Uses SVG but exposes no SVG information so that a different rendering technology can be swapped in later if required.
 
@@ -22,106 +22,103 @@ import TypedSvg.Types as SvgT
   - `cellSize`: The width and height of each cell, in pixels.
   - `rowCount`: The number of rows in the board.
   - `colCount`: The number of columns in the board.
+  - `borderStyle`: The type of border to put around the board.
 
 -}
 type alias Config =
-    { cellSize : Int, rowCount : Int, colCount : Int }
+    { cellSize : Int, rowCount : Int, colCount : Int, borderStyle : BorderStyle }
+
+
+{-| Defines the style of the border to be applied to the board:
+
+  - `Solid`: renders a solid line around the board. Used for a normal game.
+  - `Fade`: fades the edges of the board out into the supplied colour. Used in the welcome screen.
+
+-}
+type BorderStyle
+    = Solid
+    | Fade Color
 
 
 {-| Renders the current state of the board into an HTML element, using SVG.
 -}
 view : Config -> List ( Coord, BlockColour ) -> Maybe HighlightAnimation.Model -> Html msg
-view config normalBlocks highlightAnimation =
+view ({ borderStyle } as config) normalBlocks highlightAnimation =
     let
+        background =
+            Svg.rect
+                [ SvgA.width <| SvgT.percent 100
+                , SvgA.height <| SvgT.percent 100
+                , SvgA.rx <| SvgT.px 5
+                , SvgA.ry <| SvgT.px 5
+                , SvgA.fill <| SvgT.Paint Color.black
+                ]
+                []
+
         normalBlocksSvg =
-            normalBlocks
-                |> List.map
-                    (\( coord, colour ) ->
-                        drawBlock
-                            config
-                            coord
-                            (BlockColour.toLightColour colour)
-                            (BlockColour.toDarkColour colour)
-                    )
-                |> List.concat
+            drawBlocks config BlockColour.toLightColour BlockColour.toDarkColour normalBlocks
 
         highlightedBlocksSvg =
             case highlightAnimation of
                 Just animation ->
                     HighlightAnimation.animatedBlocks animation
-                        -- TODO: could cache colour calculations here per colour
-                        |> List.map
-                            (\( coord, colour ) ->
-                                drawBlock
-                                    config
-                                    coord
-                                    (HighlightAnimation.animatedColour animation (BlockColour.toLightColour colour))
-                                    (HighlightAnimation.animatedColour animation (BlockColour.toDarkColour colour))
-                            )
-                        |> List.concat
+                        |> drawBlocks config
+                            (BlockColour.toLightColour >> HighlightAnimation.animatedColour animation)
+                            (BlockColour.toDarkColour >> HighlightAnimation.animatedColour animation)
 
                 Nothing ->
                     []
     in
     svg
         [ SvgA.width <| boardSizeX config, SvgA.height <| boardSizeY config ]
-        ([ Svg.defs []
-            [ Svg.radialGradient [ SvgA.id "fade-out-overlay" ]
-                [ Svg.stop [ SvgA.offset "35%", SvgA.stopOpacity <| SvgT.Opacity 0, SvgA.stopColor "rgb(30,30,30)" ] []
-                , Svg.stop [ SvgA.offset "100%", SvgA.stopOpacity <| SvgT.Opacity 100, SvgA.stopColor "rgb(30,30,30)" ] []
-                ]
-
-            --Svg.radialGradient [ SvgA.id "fill-fade" ]
-            --    [ Svg.stop [ SvgA.offset "75%", SvgA.stopColor "rgb(0,0,0)" ] []
-            --    , Svg.stop [ SvgA.offset "100%", SvgA.stopColor "rgb(30,30,30)" ] []
-            --    ]
-            --, Svg.linearGradient
-            --    [ SvgA.id "horizontal-line-fade"
-            --    , SvgA.x1 <| SvgT.percent 0
-            --    , SvgA.x2 <| SvgT.percent 100
-            --    , SvgA.y1 <| SvgT.percent 0
-            --    , SvgA.y2 <| SvgT.percent 0
-            --    ]
-            --    [ Svg.stop [ SvgA.offset "0%", SvgA.stopColor "rgb(30,30,30)" ] []
-            --    , Svg.stop [ SvgA.offset "50%", SvgA.stopColor "rgb(238,238,236)" ] []
-            --    , Svg.stop [ SvgA.offset "100%", SvgA.stopColor "rgb(30,30,30)" ] []
-            --    ]
-            --, Svg.linearGradient
-            --    [ SvgA.id "vertical-line-fade"
-            --    , SvgA.x1 <| SvgT.percent 0
-            --    , SvgA.x2 <| SvgT.percent 0
-            --    , SvgA.y1 <| SvgT.percent 0
-            --    , SvgA.y2 <| SvgT.percent 100
-            --    ]
-            --    [ Svg.stop [ SvgA.offset "0%", SvgA.stopColor "rgb(30,30,30)" ] []
-            --    , Svg.stop [ SvgA.offset "50%", SvgA.stopColor "rgb(238,238,236)" ] []
-            --    , Svg.stop [ SvgA.offset "100%", SvgA.stopColor "rgb(30,30,30)" ] []
-            --    ]
-            ]
-         , Svg.rect
-            [ SvgA.width <| SvgT.percent 100
-            , SvgA.height <| SvgT.percent 100
-            , SvgA.rx <| SvgT.px 5
-            , SvgA.ry <| SvgT.px 5
-            , SvgA.fill <| SvgT.Paint Color.black
-
-            --, SvgA.fill <| SvgT.Reference "fill-fade"
-            ]
-            []
-         ]
+        ([ background ]
             ++ grid config
             ++ normalBlocksSvg
             ++ highlightedBlocksSvg
-            ++ [ Svg.rect
-                    [ SvgA.width <| SvgT.percent 100
-                    , SvgA.height <| SvgT.percent 100
-                    , SvgA.rx <| SvgT.px 5
-                    , SvgA.ry <| SvgT.px 5
-                    , SvgA.fill <| SvgT.Reference "fade-out-overlay"
-                    ]
-                    []
-               ]
+            ++ border borderStyle
         )
+
+
+{-| Renders the border of the board.
+-}
+border : BorderStyle -> List (Svg msg)
+border borderStyle =
+    let
+        fadeOutOverlayId =
+            "fade-out-overlay"
+    in
+    case borderStyle of
+        Solid ->
+            -- TODO: implement
+            []
+
+        Fade color ->
+            [ Svg.defs []
+                [ Svg.radialGradient [ SvgA.id fadeOutOverlayId ]
+                    -- TODO: handle colour
+                    [ Svg.stop [ SvgA.offset "35%", SvgA.stopOpacity <| SvgT.Opacity 0, SvgA.stopColor "rgb(30, 30, 30)" ] []
+                    , Svg.stop [ SvgA.offset "100%", SvgA.stopOpacity <| SvgT.Opacity 100, SvgA.stopColor "rgb(30,30,30)" ] []
+                    ]
+                ]
+            , Svg.rect
+                [ SvgA.width <| SvgT.percent 100
+                , SvgA.height <| SvgT.percent 100
+                , SvgA.rx <| SvgT.px 5
+                , SvgA.ry <| SvgT.px 5
+                , SvgA.fill <| SvgT.Reference fadeOutOverlayId
+                ]
+                []
+            ]
+
+
+{-| Draws the supplied blocks using the given functions to get the actual colours to apply to each one.
+-}
+drawBlocks : Config -> (BlockColour -> Color) -> (BlockColour -> Color) -> List ( Coord, BlockColour ) -> List (Svg msg)
+drawBlocks config toLightColour toDarkColour blocks =
+    blocks
+        |> List.map
+            (\( coord, colour ) -> drawBlock config coord (toLightColour colour) (toDarkColour colour))
+        |> List.concat
 
 
 {-| Draws the vertical and horizontal lines on the board that make it look like a grid.
@@ -142,29 +139,29 @@ type LineDirection
     | Vertical
 
 
+{-| Draws a line in the grid, in the given direction (top-to-bottom or left-to-right) at the given cell index.
+-}
 gridLine : Config -> LineDirection -> Int -> Svg msg
 gridLine ({ cellSize } as config) direction index =
     let
-        { width, height, startPos, stroke } =
+        offset =
+            index * cellSize |> toFloat |> SvgT.px
+
+        { x1, y1, x2, y2 } =
             case direction of
                 Horizontal ->
-                    { width = boardSizeX config, height = SvgT.px 0.2, startPos = ( 0, index * cellSize ), stroke = "horizontal-line-fade" }
+                    { x1 = SvgT.px 0, x2 = boardSizeX config, y1 = offset, y2 = offset }
 
                 Vertical ->
-                    { width = SvgT.px 0.2, height = boardSizeY config, startPos = ( index * cellSize, 0 ), stroke = "vertical-line-fade" }
-
-        ( x, y ) =
-            startPos |> Tuple.mapBoth (toFloat >> SvgT.px) (toFloat >> SvgT.px)
+                    { x1 = offset, x2 = offset, y1 = SvgT.px 0, y2 = boardSizeY config }
     in
-    Svg.rect
-        [ SvgA.x x
-        , SvgA.y y
-        , SvgA.width width
-        , SvgA.height height
+    Svg.line
+        [ SvgA.x1 x1
+        , SvgA.y1 y1
+        , SvgA.x2 x2
+        , SvgA.y2 y2
         , SvgA.stroke <| SvgT.Paint Color.lightGray
-
-        --, SvgA.stroke <| SvgT.Reference stroke
-        , SvgA.strokeWidth <| SvgT.px 0.2
+        , SvgA.strokeWidth <| SvgT.px 0.5
         ]
         []
 

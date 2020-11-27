@@ -10,6 +10,7 @@ import BlockColour exposing (BlockColour)
 import BoardView
 import Browser
 import Browser.Events
+import Color exposing (Color)
 import Coord exposing (Coord)
 import Element exposing (Element)
 import Element.Background
@@ -395,7 +396,7 @@ view model =
         contents =
             case model of
                 Welcome ->
-                    WelcomeScreen.view
+                    WelcomeScreen.view backgroundColour StartGameRequested |> Element.el []
 
                 Initialising ->
                     Element.text "TODO: Initialising"
@@ -413,21 +414,31 @@ view model =
                         , startGameButton
                         ]
     in
-    Element.layout [] <|
-        Element.column
-            [ Element.width Element.fill
-            , Element.height Element.fill
-            , Element.centerX
-            , Element.rgb255 30 30 30 |> Element.Background.color
-            ]
-            [ contents ]
+    Element.layout
+        [ Element.width Element.fill, Element.Background.color (colourToElmUIColour backgroundColour), Element.height Element.fill ]
+    <|
+        Element.column [ Element.centerX ] [ contents ]
+
+
+backgroundColour : Color
+backgroundColour =
+    Color.rgb255 30 30 30
+
+
+colourToElmUIColour : Color -> Element.Color
+colourToElmUIColour colour =
+    let
+        { red, green, blue, alpha } =
+            Color.toRgba colour
+    in
+    Element.rgba red green blue alpha
 
 
 {-| The configuration required to render the game.
 -}
 boardViewConfig : BoardView.Config
 boardViewConfig =
-    { cellSize = 30, rowCount = GameBoard.rowCount, colCount = GameBoard.colCount }
+    { cellSize = 30, rowCount = GameBoard.rowCount, colCount = GameBoard.colCount, borderStyle = BoardView.Solid }
 
 
 startGameButton : Element Msg
