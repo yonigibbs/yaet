@@ -17,7 +17,9 @@ Current state: WIP.
 - [x] Calculate when game over
 - [x] Create unit tests for the Game module
 - [x] When rotating pieces, if rotation means one of the blocks goes off edge, move piece back into board?
-- [ ] Prettify the UI (add `elm-ui`?)
+- [x] Prettify the UI (add `elm-ui`?)
+- [ ] Add animation to welcome screen (letters of Tetris)
+- [ ] Improve Game Over animation - drop the "Game Over" message down from top of board (use SVG for this?)
 - [ ] Constantly rotating when at the lowest possible position restarts the timer drop so user can stop the game from
       progressing at all by just holding down the rotate key.
 - [ ] Improve playability wrt long holds of buttons
@@ -34,4 +36,5 @@ Current state: WIP.
 - [ ] Buttons to use instead of keyboard for phones/tablets?
 - [ ] Investigate "Hold" feature in some versions
 - [ ] Look into probabilities of shapes - should some shapes be more likely than others (e.g. straight line)?
+- [ ] Look into existing animation libraries - poss use them instead of doing everything manually
 - [ ] TODOs in the code
