@@ -45,14 +45,25 @@ type BorderStyle
 view : Config -> List ( Coord, BlockColour ) -> Maybe HighlightAnimation.Model -> Html msg
 view ({ borderStyle } as config) normalBlocks highlightAnimation =
     let
+        ( overlay, borderAttrs ) =
+            case borderStyle of
+                Solid ->
+                    ( [], [ SvgA.stroke <| SvgT.Paint Color.white, SvgA.strokeWidth <| SvgT.px 2 ] )
+
+                Fade colourToFadeTo ->
+                    ( fadeEdgesOverlay colourToFadeTo, [] )
+
         background =
             Svg.rect
-                [ SvgA.width <| SvgT.percent 100
-                , SvgA.height <| SvgT.percent 100
-                , SvgA.rx <| SvgT.px 5
-                , SvgA.ry <| SvgT.px 5
-                , SvgA.fill <| SvgT.Paint Color.black
-                ]
+                ([ SvgA.width <| SvgT.percent 100
+                 , SvgA.height <| SvgT.percent 100
+                 , SvgA.rx <| SvgT.px 5
+                 , SvgA.ry <| SvgT.px 5
+                 , SvgA.fill <| SvgT.Paint Color.black
+                 , SvgA.stroke <| SvgT.Paint Color.red
+                 ]
+                    ++ borderAttrs
+                )
                 []
 
         normalBlocksSvg =
@@ -75,40 +86,33 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
             ++ grid config
             ++ normalBlocksSvg
             ++ highlightedBlocksSvg
-            ++ border borderStyle
+            ++ overlay
         )
 
 
 {-| Renders the border of the board.
 -}
-border : BorderStyle -> List (Svg msg)
-border borderStyle =
+fadeEdgesOverlay : Color -> List (Svg msg)
+fadeEdgesOverlay colourToFadeTo =
     let
         fadeOutOverlayId =
             "fade-out-overlay"
     in
-    case borderStyle of
-        Solid ->
-            -- TODO: implement
-            []
-
-        Fade color ->
-            [ Svg.defs []
-                [ Svg.radialGradient [ SvgA.id fadeOutOverlayId ]
-                    -- TODO: handle colour
-                    [ Svg.stop [ SvgA.offset "35%", SvgA.stopOpacity <| SvgT.Opacity 0, SvgA.stopColor "rgb(30, 30, 30)" ] []
-                    , Svg.stop [ SvgA.offset "100%", SvgA.stopOpacity <| SvgT.Opacity 100, SvgA.stopColor "rgb(30,30,30)" ] []
-                    ]
-                ]
-            , Svg.rect
-                [ SvgA.width <| SvgT.percent 100
-                , SvgA.height <| SvgT.percent 100
-                , SvgA.rx <| SvgT.px 5
-                , SvgA.ry <| SvgT.px 5
-                , SvgA.fill <| SvgT.Reference fadeOutOverlayId
-                ]
-                []
+    [ Svg.defs []
+        [ Svg.radialGradient [ SvgA.id fadeOutOverlayId ]
+            [ Svg.stop [ SvgA.offset "35%", SvgA.stopOpacity <| SvgT.Opacity 0, SvgA.stopColor <| Color.toCssString colourToFadeTo ] []
+            , Svg.stop [ SvgA.offset "100%", SvgA.stopOpacity <| SvgT.Opacity 100, SvgA.stopColor <| Color.toCssString colourToFadeTo ] []
             ]
+        ]
+    , Svg.rect
+        [ SvgA.width <| SvgT.percent 100
+        , SvgA.height <| SvgT.percent 100
+        , SvgA.rx <| SvgT.px 5
+        , SvgA.ry <| SvgT.px 5
+        , SvgA.fill <| SvgT.Reference fadeOutOverlayId
+        ]
+        []
+    ]
 
 
 {-| Draws the supplied blocks using the given functions to get the actual colours to apply to each one.

@@ -2,8 +2,11 @@ module WelcomeScreen exposing (view)
 
 import BoardView
 import Color exposing (Color)
+import ColourUtils
 import Element exposing (Element)
 import Element.Background
+import Element.Border
+import Element.Font
 import Element.Input
 
 
@@ -13,9 +16,16 @@ view backgroundColour startGameMsg =
         [ BoardView.view (boardViewConfig backgroundColour) [] Nothing |> Element.html
         , Element.row [ Element.centerX ]
             [ Element.Input.button
-                [ Element.Background.color <| Element.rgb 238 238 238
+                [ Element.Background.color <| ColourUtils.colourToElmUIColour backgroundColour
+                , Element.Font.color <| Element.rgb255 198 195 195
+                , Element.Border.color <| Element.rgb255 198 195 195
+                , Element.Border.width 2
+                , Element.Border.rounded 20
+                , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
                 ]
-                { onPress = Just startGameMsg, label = Element.text "Start Game" }
+                { onPress = Just startGameMsg
+                , label = Element.row [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] [ Element.text "Start Game" ]
+                }
             ]
         ]
 

@@ -11,6 +11,7 @@ import BoardView
 import Browser
 import Browser.Events
 import Color exposing (Color)
+import ColourUtils
 import Coord exposing (Coord)
 import Element exposing (Element)
 import Element.Background
@@ -415,7 +416,10 @@ view model =
                         ]
     in
     Element.layout
-        [ Element.width Element.fill, Element.Background.color (colourToElmUIColour backgroundColour), Element.height Element.fill ]
+        [ Element.width Element.fill
+        , Element.Background.color (ColourUtils.colourToElmUIColour backgroundColour)
+        , Element.height Element.fill
+        ]
     <|
         Element.column [ Element.centerX ] [ contents ]
 
@@ -423,15 +427,6 @@ view model =
 backgroundColour : Color
 backgroundColour =
     Color.rgb255 30 30 30
-
-
-colourToElmUIColour : Color -> Element.Color
-colourToElmUIColour colour =
-    let
-        { red, green, blue, alpha } =
-            Color.toRgba colour
-    in
-    Element.rgba red green blue alpha
 
 
 {-| The configuration required to render the game.
