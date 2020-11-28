@@ -13,18 +13,19 @@ module Game exposing
     , timerDrop
     )
 
-{-| This module controls the game currently being played. It's responsible for moving the dropping shape, adding a new
-dropping shape when it's landed, etc. It doesn't actually subscribe to timer/keyboard events etc. - instead, it exposes
-functions which the main module calls when those subscriptions fire (e.g. `moveShape`).
+{-| This module has the model and logic for a game. It's responsible for responding to requests (typically originating
+from the user or from a timer event) to move the dropping shape, add a new dropping shape when it's landed, etc. It
+doesn't actually subscribe to timer/keyboard events etc. - instead, it exposes functions which the parent module calls
+when those subscriptions fire (e.g. `moveShape`).
 
 Similarly, it doesn't have any of its own messages (e.g. for generating a random next shape): instead, it receives the
 shapes required to initialise the model, and a buffer of shapes to use next (e.g. whenever a shape lands and a new
 dropping shape is required). Whenever this happens, it takes the next item from the buffer. Then, to refill the buffer,
-it responds to the calling module (`Main`) with a flag telling it to generate a new random shape, then add it to the
-buffer by calling `shapeGenerated`. The main module, therefore, is responsible for making sure there are always enough
-shapes in the buffer so that the game will never get into a situation where it needs a shape but the buffer doesn't
-contain one. (Realistically as long as there is even one that should be fine, as the time it takes to generate the next
-random shape should be negligible. But for safety it is better to have a few more.)
+it responds to the parent module with a flag telling it to generate a new random shape, then add it to the buffer by
+calling `shapeGenerated`. The parent module, therefore, is responsible for making sure there are always enough shapes in
+the buffer so that the game will never get into a situation where it needs a shape but the buffer doesn't contain one.
+(Realistically as long as there is even one that should be fine, as the time it takes to generate the next random shape
+should be negligible. But for safety it is better to have a few more.)
 
 The above design decisions help keep this module simpler and more self-contained and, more importantly, easy to unit
 test, as it doesn't directly rely on any randomness or any time passing, so can be controlled in a completely
@@ -112,11 +113,11 @@ type alias GameBlockInfo =
     go on the board). The game's model hasn't changed as a result of this attempt.
   - `Continue`: the game should continue as normal. The updated game is supplied in the variant's data, along with a
     `newShapeRequested` boolean which, if true, means a new dropping was added to the screen, so the buffer needs filling
-    up with one more shape. The main module should generate a random shape (asynchronously) and call `shapeGenerated`,
-    passing in that random shape, when it's available. If the game has any highlighted cells then the main module should
+    up with one more shape. The parent module should generate a random shape (asynchronously) and call `shapeGenerated`,
+    passing in that random shape, when it's available. If the game has any highlighted cells then the parent module should
     now animate these. When that animation is complete, it should call `timerDrop` again, which will treat the dropping
     shape as now having landed.
-  - `RowBeingRemoved`: one or more rows are being removed. This means that the main module should now animate any
+  - `RowBeingRemoved`: one or more rows are being removed. This means that the parent module should now animate any
     highlighted blocks with the animation used for rows being removed (a "flash" effect). When that animation is
     complete, it should call `onRowRemovalAnimationComplete` again, which will remove those rows and drop all the other
     rows accordingly. This variant implicitly means that a new shape is now required (as when rows are removed a new

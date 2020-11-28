@@ -12,7 +12,6 @@ import Coord exposing (Coord)
 import Element exposing (Element)
 import Element.Border
 import HighlightAnimation
-import Html exposing (Html)
 import TypedSvg as Svg exposing (svg)
 import TypedSvg.Attributes as SvgA
 import TypedSvg.Core exposing (Svg)
@@ -39,7 +38,7 @@ type alias Config =
 -}
 type BorderStyle
     = Solid
-    | Fade Color
+    | Fade Element.Color
 
 
 {-| Renders the current state of the board into an HTML element, using SVG.
@@ -58,7 +57,7 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                     )
 
                 Fade colourToFadeTo ->
-                    ( fadeEdgesOverlay colourToFadeTo, [] )
+                    ( fadeEdgesOverlay <| elmUIColourToColour colourToFadeTo, [] )
 
         background =
             Svg.rect
@@ -231,3 +230,8 @@ boardSizeX { cellSize, colCount } =
 boardSizeY : Config -> SvgT.Length
 boardSizeY { cellSize, rowCount } =
     cellSize * rowCount |> toFloat |> SvgT.px
+
+
+elmUIColourToColour : Element.Color -> Color
+elmUIColourToColour =
+    Element.toRgb >> Color.fromRgba
