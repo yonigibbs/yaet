@@ -6,11 +6,11 @@ game by simulating user and timer actions.
 -}
 
 import BlockColour exposing (BlockColour)
-import Board
 import Coord exposing (Coord)
 import Dict exposing (Dict)
 import Expect exposing (Expectation)
 import Game exposing (Game)
+import GameBoard
 import Shape exposing (Shape)
 import ShapeUtils
 import Test exposing (Test, describe, test)
@@ -286,11 +286,11 @@ gameAsAscii game =
 
         row : Int -> String
         row y =
-            List.range 0 (Board.colCount - 1)
+            List.range 0 (GameBoard.colCount - 1)
                 |> List.map (\x -> cellAsString x y)
                 |> String.concat
     in
-    List.range 0 (Board.rowCount - 1)
+    List.range 0 (GameBoard.rowCount - 1)
         |> List.map row
         |> List.reverse
         |> String.join "\n"
@@ -319,12 +319,12 @@ buildAsciiGame padType board =
 
         emptyRow : String
         emptyRow =
-            List.repeat Board.colCount "-" |> String.concat
+            List.repeat GameBoard.colCount "-" |> String.concat
 
         padding : List String
         padding =
             List.repeat
-                (Board.rowCount - List.length suppliedLines)
+                (GameBoard.rowCount - List.length suppliedLines)
                 emptyRow
 
         allLines =
