@@ -403,7 +403,7 @@ view model =
                     Element.text "TODO: Initialising"
 
                 Playing { normalBlocks, highlightAnimation } ->
-                    Element.html <| BoardView.view boardViewConfig normalBlocks highlightAnimation
+                    BoardView.view boardViewConfig normalBlocks highlightAnimation
 
                 GameOver game ->
                     -- TODO: the below assumes there are no highlighted blocks when the game ends, but the type system doesn't
@@ -411,7 +411,7 @@ view model =
                     -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
                     Element.column []
                         [ Element.text "TODO: Game over"
-                        , Element.html <| BoardView.view boardViewConfig (Game.blocks game).normal Nothing
+                        , BoardView.view boardViewConfig (Game.blocks game).normal Nothing
                         , startGameButton
                         ]
     in

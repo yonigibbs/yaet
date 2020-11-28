@@ -13,7 +13,7 @@ import Element.Input
 view : Color -> msg -> Element msg
 view backgroundColour startGameMsg =
     Element.column []
-        [ BoardView.view (boardViewConfig backgroundColour) [] Nothing |> Element.html
+        [ BoardView.view (boardViewConfig backgroundColour) [] Nothing
         , Element.row [ Element.centerX ]
             [ Element.Input.button
                 [ Element.Background.color <| ColourUtils.colourToElmUIColour backgroundColour

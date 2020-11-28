@@ -9,6 +9,8 @@ Uses SVG but exposes no SVG information so that a different rendering technology
 import BlockColour exposing (BlockColour)
 import Color exposing (Color)
 import Coord exposing (Coord)
+import Element exposing (Element)
+import Element.Border
 import HighlightAnimation
 import Html exposing (Html)
 import TypedSvg as Svg exposing (svg)
@@ -42,28 +44,30 @@ type BorderStyle
 
 {-| Renders the current state of the board into an HTML element, using SVG.
 -}
-view : Config -> List ( Coord, BlockColour ) -> Maybe HighlightAnimation.Model -> Html msg
+view : Config -> List ( Coord, BlockColour ) -> Maybe HighlightAnimation.Model -> Element msg
 view ({ borderStyle } as config) normalBlocks highlightAnimation =
     let
         ( overlay, borderAttrs ) =
             case borderStyle of
                 Solid ->
-                    ( [], [ SvgA.stroke <| SvgT.Paint Color.white, SvgA.strokeWidth <| SvgT.px 2 ] )
+                    ( []
+                    , [ Element.Border.width 3
+                      , Element.Border.color <| Element.rgb255 100 100 100
+                      , Element.Border.glow (Element.rgb255 200 200 200) 1
+                      ]
+                    )
 
                 Fade colourToFadeTo ->
                     ( fadeEdgesOverlay colourToFadeTo, [] )
 
         background =
             Svg.rect
-                ([ SvgA.width <| SvgT.percent 100
-                 , SvgA.height <| SvgT.percent 100
-                 , SvgA.rx <| SvgT.px 5
-                 , SvgA.ry <| SvgT.px 5
-                 , SvgA.fill <| SvgT.Paint Color.black
-                 , SvgA.stroke <| SvgT.Paint Color.red
-                 ]
-                    ++ borderAttrs
-                )
+                [ SvgA.width <| SvgT.percent 100
+                , SvgA.height <| SvgT.percent 100
+                , SvgA.rx <| SvgT.px 5
+                , SvgA.ry <| SvgT.px 5
+                , SvgA.fill <| SvgT.Paint Color.black
+                ]
                 []
 
         normalBlocksSvg =
@@ -80,14 +84,17 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                 Nothing ->
                     []
     in
-    svg
-        [ SvgA.width <| boardSizeX config, SvgA.height <| boardSizeY config ]
-        ([ background ]
-            ++ grid config
-            ++ normalBlocksSvg
-            ++ highlightedBlocksSvg
-            ++ overlay
-        )
+    Element.row borderAttrs
+        [ Element.html <|
+            svg
+                [ SvgA.width <| boardSizeX config, SvgA.height <| boardSizeY config ]
+                ([ background ]
+                    ++ grid config
+                    ++ normalBlocksSvg
+                    ++ highlightedBlocksSvg
+                    ++ overlay
+                )
+        ]
 
 
 {-| Renders the border of the board.
