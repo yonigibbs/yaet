@@ -168,7 +168,7 @@ view model =
                 ]
                 [ Element.text "Game Over" ]
     in
-    Element.row [ Element.inFront gameOverOverlay, Element.alpha entireOpacity ] [ boardView ]
+    Element.el [ Element.inFront gameOverOverlay, Element.alpha entireOpacity ] boardView
 
 
 

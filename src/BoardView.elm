@@ -83,8 +83,8 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                 Nothing ->
                     []
     in
-    Element.row borderAttrs
-        [ Element.html <|
+    Element.el borderAttrs
+        (Element.html <|
             svg
                 [ SvgA.width <| boardSizeX config, SvgA.height <| boardSizeY config ]
                 ([ background ]
@@ -93,7 +93,7 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                     ++ highlightedBlocksSvg
                     ++ overlay
                 )
-        ]
+        )
 
 
 {-| Renders the border of the board.

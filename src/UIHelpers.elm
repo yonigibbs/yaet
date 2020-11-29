@@ -43,5 +43,5 @@ button caption msg =
         , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
         ]
         { onPress = Just msg
-        , label = Element.row [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] [ Element.text caption ]
+        , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)
         }

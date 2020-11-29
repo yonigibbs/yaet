@@ -1,16 +1,107 @@
-module WelcomeScreen exposing (view)
+module WelcomeScreen exposing (Model, Msg, init, subscriptions, update, view)
 
 import BlockColour exposing (BlockColour)
 import BoardView
 import Coord exposing (Coord)
 import Element exposing (Element)
+import Time
 import UIHelpers
 
 
-view : msg -> Element msg
-view startGameMsg =
+
+-- MODEL
+
+
+type alias Letter =
+    { blocks : List Coord, colour : BlockColour, gridCoord : Coord }
+
+
+type Model
+    = DroppingLetters { dropped : List Letter, dropping : Letter, next : List Letter }
+    | Pulse { letters : List Letter }
+
+
+init : Model
+init =
+    DroppingLetters
+        { dropped = []
+        , dropping = { blocks = tBlocks, colour = BlockColour.Blue, gridCoord = ( 35, initialLetterYCoord ) }
+        , next =
+            [ { blocks = eBlocks, colour = BlockColour.Red, gridCoord = ( 41, initialLetterYCoord ) }
+            , { blocks = tBlocks, colour = BlockColour.Orange, gridCoord = ( 46, initialLetterYCoord ) }
+            , { blocks = rBlocks, colour = BlockColour.Yellow, gridCoord = ( 52, initialLetterYCoord ) }
+            , { blocks = iBlocks, colour = BlockColour.Purple, gridCoord = ( 57, initialLetterYCoord ) }
+            , { blocks = sBlocks, colour = BlockColour.Green, gridCoord = ( 59, initialLetterYCoord ) }
+            ]
+        }
+
+
+initialLetterYCoord =
+    20
+
+
+lastLetterYCoord =
+    7
+
+
+
+-- UPDATE
+
+
+type Msg
+    = ProgressLetterDropAnimationRequested
+
+
+update : Msg -> Model -> Model
+update msg model =
+    case ( msg, model ) of
+        ( ProgressLetterDropAnimationRequested, DroppingLetters data ) ->
+            progressLetterDropAnimation data
+
+        ( ProgressLetterDropAnimationRequested, _ ) ->
+            -- TODO: implement pulse animation
+            model
+
+
+progressLetterDropAnimation : { dropped : List Letter, dropping : Letter, next : List Letter } -> Model
+progressLetterDropAnimation { dropped, dropping, next } =
+    let
+        ( gridX, gridY ) =
+            dropping.gridCoord
+    in
+    if gridY == lastLetterYCoord then
+        -- The currently dropping letter has reached the bottom - start the next letter
+        case next of
+            nextLetter :: restLetters ->
+                -- We have more letters to drop
+                DroppingLetters { dropped = dropping :: dropped, dropping = nextLetter, next = restLetters }
+
+            [] ->
+                -- All letters now dropped
+                Pulse { letters = dropping :: dropped }
+
+    else
+        -- The currently dropping letter can drop one more row
+        DroppingLetters { dropped = dropped, dropping = { dropping | gridCoord = ( gridX, gridY - 1 ) }, next = next }
+
+
+
+-- VIEW
+
+
+view : Model -> msg -> Element msg
+view model startGameMsg =
+    let
+        letters_ =
+            case model of
+                DroppingLetters { dropped, dropping } ->
+                    dropping :: dropped
+
+                Pulse { letters } ->
+                    letters
+    in
     Element.column [ Element.spacingXY 0 25 ]
-        [ BoardView.view boardViewConfig (lettersToBoardBlocks initialLetters) Nothing
+        [ BoardView.view boardViewConfig (lettersToBoardBlocks letters_) Nothing
         , Element.row [ Element.centerX ] [ UIHelpers.button "Start Game" startGameMsg ]
         ]
 
@@ -22,19 +113,41 @@ boardViewConfig =
     { cellSize = 15, rowCount = 20, colCount = 100, borderStyle = BoardView.Fade UIHelpers.mainBackgroundColour }
 
 
-type alias DroppingLetter =
-    { blocks : List Coord, colour : BlockColour, gridCoord : Coord }
+lettersToBoardBlocks : List Letter -> List ( Coord, BlockColour )
+lettersToBoardBlocks =
+    List.map letterToBoardBlocks >> List.concat
 
 
-initialLetters : List DroppingLetter
-initialLetters =
-    [ { blocks = tBlocks, colour = BlockColour.Blue, gridCoord = ( 35, 7 ) }
-    , { blocks = eBlocks, colour = BlockColour.Red, gridCoord = ( 41, 7 ) }
-    , { blocks = tBlocks, colour = BlockColour.Orange, gridCoord = ( 46, 7 ) }
-    , { blocks = rBlocks, colour = BlockColour.Yellow, gridCoord = ( 52, 7 ) }
-    , { blocks = iBlocks, colour = BlockColour.Purple, gridCoord = ( 57, 7 ) }
-    , { blocks = sBlocks, colour = BlockColour.Green, gridCoord = ( 59, 7 ) }
-    ]
+letterToBoardBlocks : Letter -> List ( Coord, BlockColour )
+letterToBoardBlocks { blocks, colour, gridCoord } =
+    let
+        ( gridX, gridY ) =
+            gridCoord
+    in
+    -- TODO: this is v similar to Game.calcShapeBlocksBoardCoords - poss create shared module for stuff related to drawing blocks on the board?
+    -- There's more in this module that's similar, e.g. dropping a shape one row, etc. Could also go into a shared module.
+    blocks
+        |> List.map (\( x, y ) -> ( x + gridX, y + gridY ))
+        |> List.map (\coord -> ( coord, colour ))
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    case model of
+        DroppingLetters _ ->
+            -- TODO: is 50ms right here?
+            Time.every 50 <| always ProgressLetterDropAnimationRequested
+
+        _ ->
+            Sub.none
+
+
+
+-- LETTERS
 
 
 tBlocks : List Coord
@@ -60,20 +173,3 @@ iBlocks =
 sBlocks : List Coord
 sBlocks =
     [ ( 0, 1 ), ( 1, 0 ), ( 2, 0 ), ( 3, 1 ), ( 3, 2 ), ( 2, 3 ), ( 1, 3 ), ( 0, 4 ), ( 0, 5 ), ( 1, 6 ), ( 2, 6 ), ( 3, 5 ) ]
-
-
-lettersToBoardBlocks : List DroppingLetter -> List ( Coord, BlockColour )
-lettersToBoardBlocks =
-    List.map letterToBoardBlocks >> List.concat
-
-
-letterToBoardBlocks : DroppingLetter -> List ( Coord, BlockColour )
-letterToBoardBlocks { blocks, colour, gridCoord } =
-    let
-        ( gridX, gridY ) =
-            gridCoord
-    in
-    -- TODO: this is v similar to Game.calcShapeBlocksBoardCoords - poss create shared module for stuff related to drawing blocks on the board?
-    blocks
-        |> List.map (\( x, y ) -> ( x + gridX, y + gridY ))
-        |> List.map (\coord -> ( coord, colour ))

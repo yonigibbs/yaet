@@ -5,14 +5,12 @@ of the actual game to `GameView`. It's responsible for passing user/timer events
 the game accordingly.
 -}
 
-import BlockColour
 import Browser
 import Element exposing (Element)
 import Element.Background
 import Game exposing (Game)
 import GameOver
 import Html exposing (Html)
-import Shape
 import UIHelpers exposing (edges)
 import UserGame
 import WelcomeScreen
@@ -40,7 +38,7 @@ init _ =
     --        , nextShape = BlockColour.Red |> (Shape.builders |> Tuple.first)
     --        , shapeBuffer = []
     --        }
-    ( Welcome, Cmd.none )
+    ( Welcome WelcomeScreen.init, Cmd.none )
 
 
 
@@ -48,13 +46,14 @@ init _ =
 
 
 type Model
-    = Welcome -- No game being played - showing the user some welcome/introductory info
+    = Welcome WelcomeScreen.Model -- No game being played - showing the user some welcome/introductory info
     | Playing UserGame.Model -- Game is currently being played
     | GameOver GameOver.Model -- Game has ended
 
 
 type Msg
     = StartGameRequested -- User asked to start the game
+    | GotWelcomeScreenMsg WelcomeScreen.Msg
     | GotPlayingGameMsg UserGame.Msg
     | GotGameOverMsg GameOver.Msg
 
@@ -75,10 +74,16 @@ startNewGame =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model, msg ) of
-        ( Welcome, StartGameRequested ) ->
+        ( Welcome _, StartGameRequested ) ->
             startNewGame
 
         ( _, StartGameRequested ) ->
+            ( model, Cmd.none )
+
+        ( Welcome welcomeModel, GotWelcomeScreenMsg welcomeScreenMsg ) ->
+            ( Welcome <| WelcomeScreen.update welcomeScreenMsg welcomeModel, Cmd.none )
+
+        ( _, GotWelcomeScreenMsg _ ) ->
             ( model, Cmd.none )
 
         ( Playing playingModel, GotPlayingGameMsg playingMsg ) ->
@@ -95,10 +100,10 @@ update msg model =
         ( GameOver gameOverModel, GotGameOverMsg gameOverMsg ) ->
             case GameOver.update gameOverMsg gameOverModel of
                 GameOver.Continue nextGameOverModel ->
-                    ( nextGameOverModel, Cmd.none ) |> updateSubModel GameOver GotGameOverMsg
+                    ( GameOver nextGameOverModel, Cmd.none )
 
                 GameOver.Done ->
-                    ( Welcome, Cmd.none )
+                    ( Welcome WelcomeScreen.init, Cmd.none )
 
         ( _, GotGameOverMsg _ ) ->
             ( model, Cmd.none )
@@ -123,8 +128,8 @@ view model =
         contents : Element Msg
         contents =
             case model of
-                Welcome ->
-                    WelcomeScreen.view StartGameRequested |> Element.el []
+                Welcome welcomeModel ->
+                    WelcomeScreen.view welcomeModel StartGameRequested |> Element.el []
 
                 Playing playingModel ->
                     UserGame.view playingModel |> Element.map GotPlayingGameMsg |> wrapBoardView
@@ -156,8 +161,8 @@ wrapBoardView boardView =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
-        Welcome ->
-            Sub.none
+        Welcome welcomeModel ->
+            WelcomeScreen.subscriptions welcomeModel |> Sub.map GotWelcomeScreenMsg
 
         Playing playingModel ->
             UserGame.subscriptions playingModel |> Sub.map GotPlayingGameMsg
