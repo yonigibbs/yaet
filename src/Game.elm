@@ -49,7 +49,7 @@ info).
 -}
 type alias DroppingShape =
     { shape : Shape -- The shape itself
-    , coord : Coord -- The coordinates of the bottom-left corner of the grid containing the shape, on the board
+    , gridCoord : Coord -- The coordinates of the bottom-left corner of the grid containing the shape, on the board
     }
 
 
@@ -169,7 +169,7 @@ initDroppingShape shape =
         y =
             GameBoard.rowCount - shapeGridSize
     in
-    { shape = shape, coord = ( x, y ) }
+    { shape = shape, gridCoord = ( x, y ) }
 
 
 
@@ -186,7 +186,7 @@ timerDrop ((Game ({ state, board } as model)) as game) =
         RegularGameState { droppingShape } ->
             let
                 proposedDroppingShape =
-                    { droppingShape | coord = nextCoord Down droppingShape.coord }
+                    { droppingShape | gridCoord = nextCoord Down droppingShape.gridCoord }
             in
             if isValidPosition board proposedDroppingShape then
                 -- It's valid for the currently dropping shape to go down by one row, so just do that.
@@ -208,7 +208,7 @@ moveShape direction (Game ({ state, board } as model)) =
         RegularGameState { droppingShape } ->
             let
                 proposedDroppingShape =
-                    { droppingShape | coord = nextCoord direction droppingShape.coord }
+                    { droppingShape | gridCoord = nextCoord direction droppingShape.gridCoord }
             in
             if isValidPosition board proposedDroppingShape then
                 continueWithUpdatedDroppingShape False proposedDroppingShape model
@@ -249,11 +249,11 @@ nextValidRotatedDroppingShape droppingShape board =
     in
     if List.any (\( x, _ ) -> x < 0) shapeCoords then
         -- Shape is off the left edge of the board: move it right one cell then try again.
-        nextValidRotatedDroppingShape { droppingShape | coord = nextCoord Right droppingShape.coord } board
+        nextValidRotatedDroppingShape { droppingShape | gridCoord = nextCoord Right droppingShape.gridCoord } board
 
     else if List.any (\( x, _ ) -> x >= GameBoard.colCount) shapeCoords then
         -- Shape is off the right edge of the board: move it left one cell then try again.
-        nextValidRotatedDroppingShape { droppingShape | coord = nextCoord Left droppingShape.coord } board
+        nextValidRotatedDroppingShape { droppingShape | gridCoord = nextCoord Left droppingShape.gridCoord } board
 
     else if GameBoard.areCellsAvailable board shapeCoords then
         -- Shape is on the board and valid.
@@ -385,12 +385,12 @@ isValidPosition board droppingShape =
 coordinates are relative to the coordinates of the shape itself.
 -}
 calcShapeBlocksBoardCoords : DroppingShape -> List Coord
-calcShapeBlocksBoardCoords droppingShape =
+calcShapeBlocksBoardCoords { gridCoord, shape } =
     let
         ( shapeX, shapeY ) =
-            droppingShape.coord
+            gridCoord
     in
-    Shape.data droppingShape.shape
+    Shape.data shape
         |> .blocks
         |> List.map (\( x, y ) -> ( x + shapeX, y + shapeY ))
 
@@ -410,7 +410,7 @@ blocks (Game { board, state }) =
                     calcShapeBlocksBoardCoords droppingShape |> List.map (\coord -> ( coord, colour ))
 
                 canDropMore =
-                    isValidPosition board { droppingShape | coord = nextCoord Down droppingShape.coord }
+                    isValidPosition board { droppingShape | gridCoord = nextCoord Down droppingShape.gridCoord }
             in
             if canDropMore then
                 { normal = GameBoard.occupiedCells board ++ droppingShapeBlocks, highlighted = [] }

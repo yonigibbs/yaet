@@ -28,6 +28,10 @@ buttonBorderColor =
     Element.rgb255 198 195 195
 
 
+
+-- TODO: currently only used in welcome screen - poss don't need in this module? Poss don't need this module at all?
+
+
 button : String -> msg -> Element msg
 button caption msg =
     Element.Input.button
