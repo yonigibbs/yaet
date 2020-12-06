@@ -6,6 +6,7 @@ module HighlightAnimation exposing
     , UpdateResult(..)
     , animatedBlocks
     , animatedColour
+    , animatedOpacity
     , highlightAnimationType
     , initialId
     , nextAnimationId
@@ -187,39 +188,54 @@ animatedBlocks (Model { blocks }) =
     blocks
 
 
+{-| Calculates the opacity to use when rendering a highlighted cell with the given animation model.
+-}
+animatedOpacity : Model -> Float
+animatedOpacity (Model { animationType, elapsedTimeMs, totalTimeMs }) =
+    case animationType of
+        ShapeLanding ->
+            let
+                percentComplete =
+                    100 * elapsedTimeMs / totalTimeMs
+            in
+            if percentComplete < 50 then
+                -- Reduce the opacity to nearly (but not quite) 0
+                1 - (0.9 * percentComplete / 50)
+
+            else
+                -- Increase the opacity back towards 1
+                1 - (0.9 * ((100 - percentComplete) / 50))
+
+        RowRemoval ->
+            -- We don't change the opacity in this animation type
+            1
+
+
 {-| Calculates the colour to use when rendering the supplied colour using the supplied animation. Returns a lighter or
 darker version of that colour based on the type and progress of the animation.
 -}
 animatedColour : Model -> Color -> Color
 animatedColour (Model { animationType, elapsedTimeMs, totalTimeMs }) colour =
-    let
-        percentComplete =
-            100 * elapsedTimeMs / totalTimeMs
+    case animationType of
+        ShapeLanding ->
+            -- We don't change the colour in this animation type
+            colour
 
-        calcColourPart =
-            case animationType of
-                ShapeLanding ->
-                    if percentComplete < 50 then
-                        -- Dim the colour by reducing it towards 0, but never quite that far.
-                        \part -> part - (0.9 * part * percentComplete / 50)
-
-                    else
-                        -- Brighten the colour back up from near 0 towards its initial value
-                        \part -> part - (0.9 * (part * (100 - percentComplete) / 50))
-
-                RowRemoval ->
-                    -- Brighten towards one for the full length of the animation, to make it "flash"
-                    \part -> part + ((1 - part) * percentComplete / 100)
-    in
-    Color.toRgba colour
-        |> (\{ red, green, blue, alpha } ->
-                { red = calcColourPart red
-                , green = calcColourPart green
-                , blue = calcColourPart blue
-                , alpha = alpha
-                }
-           )
-        |> Color.fromRgba
+        RowRemoval ->
+            -- Brighten towards one for the full length of the animation, to make it "flash"
+            let
+                calcColourPart part =
+                    part + ((1 - part) * elapsedTimeMs / totalTimeMs)
+            in
+            Color.toRgba colour
+                |> (\{ red, green, blue, alpha } ->
+                        { red = calcColourPart red
+                        , green = calcColourPart green
+                        , blue = calcColourPart blue
+                        , alpha = alpha
+                        }
+                   )
+                |> Color.fromRgba
 
 
 

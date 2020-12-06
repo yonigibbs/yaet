@@ -70,13 +70,14 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                 []
 
         normalBlocksSvg =
-            drawBlocks config BlockColour.toLightColour BlockColour.toDarkColour normalBlocks
+            drawBlocks config 1 BlockColour.toLightColour BlockColour.toDarkColour normalBlocks
 
         highlightedBlocksSvg =
             case highlightAnimation of
                 Just animation ->
                     HighlightAnimation.animatedBlocks animation
                         |> drawBlocks config
+                            (HighlightAnimation.animatedOpacity animation)
                             (BlockColour.toLightColour >> HighlightAnimation.animatedColour animation)
                             (BlockColour.toDarkColour >> HighlightAnimation.animatedColour animation)
 
@@ -123,11 +124,11 @@ fadeEdgesOverlay colourToFadeTo =
 
 {-| Draws the supplied blocks using the given functions to get the actual colours to apply to each one.
 -}
-drawBlocks : Config -> (BlockColour -> Color) -> (BlockColour -> Color) -> List ( Coord, BlockColour ) -> List (Svg msg)
-drawBlocks config toLightColour toDarkColour blocks =
+drawBlocks : Config -> Float -> (BlockColour -> Color) -> (BlockColour -> Color) -> List ( Coord, BlockColour ) -> List (Svg msg)
+drawBlocks config opacity toLightColour toDarkColour blocks =
     blocks
         |> List.map
-            (\( coord, colour ) -> drawBlock config coord (toLightColour colour) (toDarkColour colour))
+            (\( coord, colour ) -> drawBlock config coord opacity (toLightColour colour) (toDarkColour colour))
         |> List.concat
 
 
@@ -178,8 +179,8 @@ gridLine ({ cellSize } as config) direction index =
 
 {-| Draws a block at the given coordinate, and of the given colour.
 -}
-drawBlock : Config -> Coord -> Color -> Color -> List (Svg msg)
-drawBlock config coord lightColour darkColour =
+drawBlock : Config -> Coord -> Float -> Color -> Color -> List (Svg msg)
+drawBlock config coord opacity lightColour darkColour =
     let
         ( x1, y1 ) =
             coordToGridPos config coord
@@ -196,6 +197,7 @@ drawBlock config coord lightColour darkColour =
         , SvgA.width <| SvgT.px innerSize
         , SvgA.height <| SvgT.px innerSize
         , SvgA.fill <| SvgT.Paint lightColour
+        , SvgA.opacity <| SvgT.Opacity opacity
         ]
         []
     , -- A triangle of a slightly darker colour.
@@ -206,6 +208,7 @@ drawBlock config coord lightColour darkColour =
             , ( x1, y1 + innerSize )
             ]
         , SvgA.fill <| SvgT.Paint darkColour
+        , SvgA.opacity <| SvgT.Opacity opacity
         ]
         []
     ]
