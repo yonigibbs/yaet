@@ -5,6 +5,9 @@ import BoardView
 import Coord exposing (Coord)
 import Element exposing (Element)
 import HighlightAnimation
+import Random
+import RandomShapeGenerator
+import Shape exposing (Shape)
 import Time
 import UIHelpers
 
@@ -20,7 +23,8 @@ type alias Letter =
 type Model
     = DroppingLetters { dropped : List Letter, dropping : Letter, next : List Letter }
     | PulsingLetters { letters : List Letter, animation : HighlightAnimation.Model }
-    | DroppingRandomShapes { letters : List Letter }
+      -- TODO: droppingShape below is same as DroppingShape alias in Game. Put somewhere common and reuse definition here?
+    | DroppingRandomShapes { letters : List Letter, droppingShape : Maybe { shape : Shape, gridCoord : Coord } }
 
 
 init : Model
@@ -38,10 +42,12 @@ init =
         }
 
 
+initialLetterYCoord : Int
 initialLetterYCoord =
     20
 
 
+lastLetterYCoord : Int
 lastLetterYCoord =
     7
 
@@ -53,22 +59,40 @@ lastLetterYCoord =
 type Msg
     = ProgressLetterDropAnimationRequested
     | GotHighlightAnimationMsg HighlightAnimation.Msg
+    | RandomShapeGenerated { shape : Shape, xCoord : Int }
+    | ShapeDropDelayElapsed
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( msg, model ) of
         ( ProgressLetterDropAnimationRequested, DroppingLetters data ) ->
-            progressLetterDropAnimation data
+            ( progressLetterDropAnimation data, Cmd.none )
 
         ( ProgressLetterDropAnimationRequested, _ ) ->
-            model
+            ( model, Cmd.none )
 
-        ( GotHighlightAnimationMsg highlightAnimationMsg, PulsingLetters pulsingLettersData ) ->
-            progressPulsingLettersAnimation model highlightAnimationMsg pulsingLettersData
+        ( GotHighlightAnimationMsg highlightAnimationMsg, PulsingLetters data ) ->
+            progressPulsingLettersAnimation model highlightAnimationMsg data
 
         ( GotHighlightAnimationMsg _, _ ) ->
-            model
+            ( model, Cmd.none )
+
+        ( RandomShapeGenerated { shape, xCoord }, DroppingRandomShapes data ) ->
+            -- TODO: rename initialLetterYCoord to be less letter-specific? Also used for name below
+            ( DroppingRandomShapes
+                { data | droppingShape = Just { shape = shape, gridCoord = ( xCoord, initialLetterYCoord ) } }
+            , Cmd.none
+            )
+
+        ( RandomShapeGenerated _, _ ) ->
+            ( model, Cmd.none )
+
+        ( ShapeDropDelayElapsed, DroppingRandomShapes data ) ->
+            handleShapeDropDelayElapsed data
+
+        ( ShapeDropDelayElapsed, _ ) ->
+            ( model, Cmd.none )
 
 
 progressLetterDropAnimation : { dropped : List Letter, dropping : Letter, next : List Letter } -> Model
@@ -86,7 +110,6 @@ progressLetterDropAnimation { dropped, dropping, next } =
 
             [] ->
                 -- All letters now dropped
-                -- TODO: the 1000 below is same value as in UserGame.startNewGame - create common constant somewhere?
                 let
                     letters =
                         dropping :: dropped
@@ -96,7 +119,6 @@ progressLetterDropAnimation { dropped, dropping, next } =
                     , animation =
                         HighlightAnimation.startNewAnimation HighlightAnimation.initialId
                             HighlightAnimation.ShapeLanding
-                            -- TODO: this 1000 is same hard-coded value as in UserGame.startNewGame - put somewhere common?
                             1000
                             (lettersToBoardBlocks letters)
                     }
@@ -106,17 +128,48 @@ progressLetterDropAnimation { dropped, dropping, next } =
         DroppingLetters { dropped = dropped, dropping = { dropping | gridCoord = ( gridX, gridY - 1 ) }, next = next }
 
 
-progressPulsingLettersAnimation : Model -> HighlightAnimation.Msg -> { letters : List Letter, animation : HighlightAnimation.Model } -> Model
+progressPulsingLettersAnimation : Model -> HighlightAnimation.Msg -> { letters : List Letter, animation : HighlightAnimation.Model } -> ( Model, Cmd Msg )
 progressPulsingLettersAnimation model msg pulsingLettersData =
     case HighlightAnimation.update msg pulsingLettersData.animation of
         HighlightAnimation.IgnoreMsg ->
-            model
+            ( model, Cmd.none )
 
         HighlightAnimation.Continue nextAnimationModel ->
-            PulsingLetters { pulsingLettersData | animation = nextAnimationModel }
+            ( PulsingLetters { pulsingLettersData | animation = nextAnimationModel }, Cmd.none )
 
         HighlightAnimation.Complete ->
-            DroppingRandomShapes { letters = pulsingLettersData.letters }
+            ( DroppingRandomShapes { letters = pulsingLettersData.letters, droppingShape = Nothing }, generateRandomShape )
+
+
+handleShapeDropDelayElapsed : { letters : List Letter, droppingShape : Maybe { shape : Shape, gridCoord : Coord } } -> ( Model, Cmd Msg )
+handleShapeDropDelayElapsed data =
+    case data.droppingShape of
+        Just droppingShape ->
+            let
+                ( x, y ) =
+                    droppingShape.gridCoord
+            in
+            if y == 0 then
+                -- Reached the bottom - kill this shape and request another.
+                ( DroppingRandomShapes { data | droppingShape = Nothing }, generateRandomShape )
+
+            else
+                ( DroppingRandomShapes
+                    { data | droppingShape = Just { shape = droppingShape.shape, gridCoord = ( x, y - 1 ) } }
+                , Cmd.none
+                )
+
+        Nothing ->
+            -- We don't have a shape so can't drop anything
+            ( DroppingRandomShapes data, Cmd.none )
+
+
+generateRandomShape : Cmd Msg
+generateRandomShape =
+    Random.map2 (\shape xCoord -> { shape = shape, xCoord = xCoord })
+        RandomShapeGenerator.generator
+        (Random.int 20 60)
+        |> Random.generate RandomShapeGenerated
 
 
 
@@ -126,19 +179,19 @@ progressPulsingLettersAnimation model msg pulsingLettersData =
 view : Model -> msg -> Element msg
 view model startGameMsg =
     let
-        ( letters_, animation_ ) =
+        ( letters_, animation_, droppingShapeBlocks ) =
             case model of
                 DroppingLetters { dropped, dropping } ->
-                    ( dropping :: dropped, Nothing )
+                    ( dropping :: dropped, Nothing, [] )
 
-                PulsingLetters { letters, animation } ->
-                    ( letters, Just animation )
+                PulsingLetters { animation } ->
+                    ( [], Just animation, [] )
 
-                DroppingRandomShapes { letters } ->
-                    ( letters, Nothing )
+                DroppingRandomShapes { letters, droppingShape } ->
+                    ( letters, Nothing, Maybe.map droppingShapeToBoardBlocks droppingShape |> Maybe.withDefault [] )
     in
     Element.column [ Element.spacingXY 0 25 ]
-        [ BoardView.view boardViewConfig (lettersToBoardBlocks letters_) animation_
+        [ BoardView.view boardViewConfig (droppingShapeBlocks ++ lettersToBoardBlocks letters_) animation_
         , Element.row [ Element.centerX ] [ UIHelpers.button "Start Game" startGameMsg ]
         ]
 
@@ -168,6 +221,25 @@ letterToBoardBlocks { blocks, colour, gridCoord } =
         |> List.map (\coord -> ( coord, colour ))
 
 
+droppingShapeToBoardBlocks : { shape : Shape, gridCoord : Coord } -> List ( Coord, BlockColour )
+droppingShapeToBoardBlocks { shape, gridCoord } =
+    -- TODO: is this just a duplicate of Game.calcShapeBlocksBoardCoords? Put somewhere common.
+    let
+        ( shapeX, shapeY ) =
+            gridCoord
+
+        { blocks, colour } =
+            Shape.data shape
+    in
+    blocks
+        |> List.map (\( x, y ) -> ( ( x + shapeX, y + shapeY ), colour ))
+
+
+shapeDropDelayMs : Int
+shapeDropDelayMs =
+    500
+
+
 
 -- SUBSCRIPTIONS
 
@@ -181,8 +253,13 @@ subscriptions model =
         PulsingLetters { animation } ->
             HighlightAnimation.subscriptions animation |> Sub.map GotHighlightAnimationMsg
 
-        _ ->
-            Sub.none
+        DroppingRandomShapes { droppingShape } ->
+            case droppingShape of
+                Nothing ->
+                    Sub.none
+
+                Just _ ->
+                    Time.every (toFloat shapeDropDelayMs) <| always ShapeDropDelayElapsed
 
 
 

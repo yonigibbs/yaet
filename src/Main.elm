@@ -83,7 +83,8 @@ update msg model =
             ( model, Cmd.none )
 
         ( Welcome welcomeModel, GotWelcomeScreenMsg welcomeScreenMsg ) ->
-            ( Welcome <| WelcomeScreen.update welcomeScreenMsg welcomeModel, Cmd.none )
+            WelcomeScreen.update welcomeScreenMsg welcomeModel
+                |> updateSubModel Welcome GotWelcomeScreenMsg
 
         ( _, GotWelcomeScreenMsg _ ) ->
             ( model, Cmd.none )
@@ -91,7 +92,8 @@ update msg model =
         ( Playing playingModel, GotPlayingGameMsg playingMsg ) ->
             case UserGame.update playingMsg playingModel of
                 UserGame.Continue nextPlayingModel nextPlayingCmd ->
-                    ( nextPlayingModel, nextPlayingCmd ) |> updateSubModel Playing GotPlayingGameMsg
+                    ( nextPlayingModel, nextPlayingCmd )
+                        |> updateSubModel Playing GotPlayingGameMsg
 
                 UserGame.GameOver game ->
                     ( GameOver <| GameOver.init game, Cmd.none )

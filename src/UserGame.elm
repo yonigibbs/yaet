@@ -8,7 +8,6 @@ in a unit test). This module provides that control, and also the view for render
 the board and other related items such as a Pause button, etc.
 -}
 
-import Array exposing (Array)
 import BlockColour exposing (BlockColour)
 import BoardView
 import Browser.Events
@@ -19,6 +18,7 @@ import GameBoard
 import HighlightAnimation
 import Keyboard
 import Random
+import RandomShapeGenerator
 import Shape exposing (Shape)
 import Time
 
@@ -312,43 +312,16 @@ handleAnimationMsg model msg =
 -- RANDOM SHAPE GENERATION
 
 
-{-| All the possible colours, in an array so that one can be randomly chosen from it.
+generateRandomShape : Cmd Msg
+generateRandomShape =
+    Random.generate RandomShapeGenerated RandomShapeGenerator.generator
+
+
+{-| Generator of the random data required to start a new game.
 -}
-allColours : Array BlockColour
-allColours =
-    Array.fromList [ BlockColour.Blue, BlockColour.Red, BlockColour.Orange, BlockColour.Yellow, BlockColour.Purple, BlockColour.Green ]
-
-
-{-| Functions for generating each of the possible colours, in an array so that one can be randomly chosen from it.
--}
-allShapeBuilders : Array Shape.ShapeBuilder
-allShapeBuilders =
-    let
-        ( first, rest ) =
-            Shape.builders
-    in
-    Array.fromList (first :: rest)
-
-
-randomColourGenerator : Random.Generator BlockColour
-randomColourGenerator =
-    Random.int 0 (Array.length allColours - 1)
-        |> Random.map (\index -> Array.get index allColours |> Maybe.withDefault BlockColour.Blue)
-
-
-randomShapeBuilderGenerator : Random.Generator Shape.ShapeBuilder
-randomShapeBuilderGenerator =
-    Random.int 0 (Array.length allShapeBuilders - 1)
-        |> Random.map (\index -> Array.get index allShapeBuilders |> Maybe.withDefault (Tuple.first Shape.builders))
-
-
-{-| Generator of random shapes. Requires a random colour and a random `ShapeBuilder` function. The latter is called,
-receiving the result of the former, to eventually get a `Shape`.
--}
-randomShapeGenerator : Random.Generator Shape
-randomShapeGenerator =
-    Random.pair randomColourGenerator randomShapeBuilderGenerator
-        |> Random.map (\( colour, shapeBuilder ) -> shapeBuilder colour)
+initialGameDataGenerator : Random.Generator Game.InitialisationInfo
+initialGameDataGenerator =
+    Random.map3 Game.InitialisationInfo RandomShapeGenerator.generator RandomShapeGenerator.generator shapeBufferGenerator
 
 
 {-| Generator of a list of random shapes (of length 5). See the `Game` module's comments for details of the random shape
@@ -358,23 +331,11 @@ shapeBufferGenerator : Random.Generator (List Shape)
 shapeBufferGenerator =
     Random.map5
         (\s1 s2 s3 s4 s5 -> [ s1, s2, s3, s4, s5 ])
-        randomShapeGenerator
-        randomShapeGenerator
-        randomShapeGenerator
-        randomShapeGenerator
-        randomShapeGenerator
-
-
-{-| Generator of the random data required to start a new game.
--}
-initialGameDataGenerator : Random.Generator Game.InitialisationInfo
-initialGameDataGenerator =
-    Random.map3 Game.InitialisationInfo randomShapeGenerator randomShapeGenerator shapeBufferGenerator
-
-
-generateRandomShape : Cmd Msg
-generateRandomShape =
-    Random.generate RandomShapeGenerated randomShapeGenerator
+        RandomShapeGenerator.generator
+        RandomShapeGenerator.generator
+        RandomShapeGenerator.generator
+        RandomShapeGenerator.generator
+        RandomShapeGenerator.generator
 
 
 
