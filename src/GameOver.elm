@@ -1,5 +1,9 @@
 module GameOver exposing (Model, Msg, UpdateResult(..), init, subscriptions, update, view)
 
+{-| This module handles all functionality related to when a game is over. Shows the board as it was when the game ended,
+animating a "Game Over" message on top of it, then fading the game out.
+-}
+
 import BlockColour exposing (BlockColour)
 import BoardView
 import Browser.Events
@@ -9,8 +13,6 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Game exposing (Game)
-import Task
-import Time
 import UIHelpers
 import UserGame
 
@@ -19,19 +21,36 @@ import UserGame
 -- MODEL
 
 
+{-| The model of the current animation (there are three stages to the animation: see `Model`).
+-}
 type alias AnimationModel =
-    { blocks : List ( Coord, BlockColour ), totalTimeMs : Float, elapsedTimeMs : Float }
+    { totalTimeMs : Float, elapsedTimeMs : Float }
 
 
-type Model
+{-| Describes the current stage of the animation.
+-}
+type Animation
     = EnteringGameOverMessage AnimationModel
     | ShowingGameOverMessage AnimationModel
     | FadingOut AnimationModel
 
 
+{-| The data associated with the model (which is an opaque type).
+-}
+type alias ModelData =
+    { blocks : List ( Coord, BlockColour ), animation : Animation }
+
+
+type Model
+    = Model ModelData
+
+
 init : Game -> Model
 init game =
-    EnteringGameOverMessage { blocks = (Game.blocks game).normal, totalTimeMs = 1000, elapsedTimeMs = 0 }
+    Model
+        { blocks = (Game.blocks game).normal
+        , animation = EnteringGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 }
+        }
 
 
 
@@ -42,41 +61,60 @@ type Msg
     = AnimationFrame Float
 
 
+{-| The value returned from the `update` function. Either `Continue`, meaning the game over animation is still in action,
+or `Done`, meaning it's finished and the calling module should now return the user to the welcome screen.
+-}
 type UpdateResult
     = Continue Model
     | Done
 
 
+{-| Updates this module's model based on the supplied message. Returns an `UpdateResult` which informs the calling module
+of how to proceed (see `UpdateResult` for more info).
+-}
 update : Msg -> Model -> UpdateResult
-update msg model =
-    case ( msg, model ) of
-        ( AnimationFrame timeSinceLastFrameMs, EnteringGameOverMessage animationModel ) ->
-            progressAnimation timeSinceLastFrameMs
+update (AnimationFrame timeSinceLastFrameMs) (Model model) =
+    case model.animation of
+        EnteringGameOverMessage animationModel ->
+            progressAnimation model
+                timeSinceLastFrameMs
                 animationModel
                 EnteringGameOverMessage
-                (Continue <| ShowingGameOverMessage { blocks = animationModel.blocks, totalTimeMs = 1000, elapsedTimeMs = 0 })
+                (Just <| ShowingGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 })
 
-        ( AnimationFrame timeSinceLastFrameMs, ShowingGameOverMessage animationModel ) ->
-            progressAnimation timeSinceLastFrameMs
+        ShowingGameOverMessage animationModel ->
+            progressAnimation model
+                timeSinceLastFrameMs
                 animationModel
                 ShowingGameOverMessage
-                (Continue <| FadingOut { blocks = animationModel.blocks, totalTimeMs = 500, elapsedTimeMs = 0 })
+                (Just <| FadingOut { totalTimeMs = 500, elapsedTimeMs = 0 })
 
-        ( AnimationFrame timeSinceLastFrameMs, FadingOut animationModel ) ->
-            progressAnimation timeSinceLastFrameMs animationModel FadingOut Done
+        FadingOut animationModel ->
+            progressAnimation model timeSinceLastFrameMs animationModel FadingOut Nothing
 
 
-progressAnimation : Float -> AnimationModel -> (AnimationModel -> Model) -> UpdateResult -> UpdateResult
-progressAnimation timeSinceLastFrameMs ({ totalTimeMs, elapsedTimeMs } as animationModel) ifAnimationRunning ifAnimationOver =
+{-| Progresses the animation after an animation frame. Each animation knows the toal time it should run for so this will
+either continue the current animation if not enough time has elapsed yet (using `ifAnimationContinuing`) or will use
+`ifAnimationOver` to decide how to proceed. If that parameter is a `Nothing` then `Done` is returned, meaning this
+whole module is now finished and the user should be returned to the Welcome screen. Otherwise (i.e. if `ifAnimationOver`
+is `Just` some `Animation`, then that `Animation` is used (i.e. the next stage in the overall animation proceeds).
+-}
+progressAnimation : ModelData -> Float -> AnimationModel -> (AnimationModel -> Animation) -> Maybe Animation -> UpdateResult
+progressAnimation modelData timeSinceLastFrameMs animationModel ifAnimationContinuing ifAnimationOver =
     let
         newElapsedTimeMs =
-            elapsedTimeMs + timeSinceLastFrameMs
+            animationModel.elapsedTimeMs + timeSinceLastFrameMs
     in
-    if newElapsedTimeMs < totalTimeMs then
-        { animationModel | elapsedTimeMs = newElapsedTimeMs } |> ifAnimationRunning |> Continue
+    if newElapsedTimeMs < animationModel.totalTimeMs then
+        { animationModel | elapsedTimeMs = newElapsedTimeMs }
+            |> ifAnimationContinuing
+            |> (\continuingAnimation -> Model { modelData | animation = continuingAnimation })
+            |> Continue
 
     else
         ifAnimationOver
+            |> Maybe.map (\nextAnimation -> Continue <| Model { modelData | animation = nextAnimation })
+            |> Maybe.withDefault Done
 
 
 
@@ -84,13 +122,13 @@ progressAnimation timeSinceLastFrameMs ({ totalTimeMs, elapsedTimeMs } as animat
 
 
 view : Model -> Element msg
-view model =
+view (Model modelData) =
     let
-        { blocks, messageOpacity, messageGlow, entireOpacity } =
-            calcViewInfo model
+        { messageOpacity, messageGlow, entireOpacity } =
+            calcViewInfo modelData
 
         boardView =
-            BoardView.view UserGame.boardViewConfig (blocks |> BoardView.withOpacity 1) Nothing
+            BoardView.view UserGame.boardViewConfig (modelData.blocks |> BoardView.withOpacity 1) Nothing
 
         gameOverOverlay =
             Element.row
@@ -112,8 +150,8 @@ view model =
     Element.el [ Element.inFront gameOverOverlay, Element.alpha entireOpacity ] boardView
 
 
-calcViewInfo : Model -> { blocks : List ( Coord, BlockColour ), messageOpacity : Float, messageGlow : Float, entireOpacity : Float }
-calcViewInfo model =
+calcViewInfo : ModelData -> { messageOpacity : Float, messageGlow : Float, entireOpacity : Float }
+calcViewInfo { animation } =
     let
         defaultMessageGlow =
             5
@@ -121,14 +159,13 @@ calcViewInfo model =
         calcPercentComplete { totalTimeMs, elapsedTimeMs } =
             100 * elapsedTimeMs / totalTimeMs
     in
-    case model of
+    case animation of
         EnteringGameOverMessage animationModel ->
             let
                 percentComplete =
                     calcPercentComplete animationModel
             in
-            { blocks = animationModel.blocks
-            , messageOpacity = percentComplete / 100
+            { messageOpacity = percentComplete / 100
             , messageGlow = defaultMessageGlow * percentComplete / 100
             , entireOpacity = 1
             }
@@ -145,8 +182,7 @@ calcViewInfo model =
                     else
                         ((100 - percentComplete) / 50) * defaultMessageGlow
             in
-            { blocks = animationModel.blocks
-            , messageOpacity = 1
+            { messageOpacity = 1
             , messageGlow = defaultMessageGlow + extraMessageGlow
             , entireOpacity = 1
             }
@@ -156,8 +192,7 @@ calcViewInfo model =
                 percentComplete =
                     calcPercentComplete animationModel
             in
-            { blocks = animationModel.blocks
-            , messageOpacity = 1
+            { messageOpacity = 1
             , messageGlow = defaultMessageGlow - (defaultMessageGlow * percentComplete / 100)
             , entireOpacity = 1 - (percentComplete / 100)
             }

@@ -34,23 +34,15 @@ predictable and time-independent fashion in tests.
 -}
 
 import BlockColour exposing (BlockColour)
+import BoardView
 import Coord exposing (Coord)
+import DroppingShape exposing (DroppingShape)
 import GameBoard exposing (GameBoard)
 import Shape exposing (Shape)
 
 
 
 -- MODEL TYPES
-
-
-{-| The currently dropping shape, namely the `Shape` itself, and its coordinates. The latter are the coordinates on the
-board of the bottom left corner of the grid which contains the shape (see comments on the `Shape` module itself for more
-info).
--}
-type alias DroppingShape =
-    { shape : Shape -- The shape itself
-    , gridCoord : Coord -- The coordinates of the bottom-left corner of the grid containing the shape, on the board
-    }
 
 
 {-| A game in the process of being played.
@@ -245,7 +237,7 @@ nextValidRotatedDroppingShape : DroppingShape -> GameBoard -> Maybe DroppingShap
 nextValidRotatedDroppingShape droppingShape board =
     let
         shapeCoords =
-            calcShapeBlocksBoardCoords droppingShape
+            DroppingShape.calcShapeBlocksBoardCoords droppingShape
     in
     if List.any (\( x, _ ) -> x < 0) shapeCoords then
         -- Shape is off the left edge of the board: move it right one cell then try again.
@@ -279,7 +271,7 @@ handleDroppingShapeLanded (Game ({ shapeBuffer, state, board, nextShape } as mod
                     Shape.data droppingShape.shape
 
                 nextBoard =
-                    GameBoard.append board colour (calcShapeBlocksBoardCoords droppingShape)
+                    GameBoard.append board colour (DroppingShape.calcShapeBlocksBoardCoords droppingShape)
 
                 completedRows =
                     GameBoard.completedRows nextBoard
@@ -378,21 +370,7 @@ nextCoord direction ( x, y ) =
 -}
 isValidPosition : GameBoard -> DroppingShape -> Bool
 isValidPosition board droppingShape =
-    calcShapeBlocksBoardCoords droppingShape |> GameBoard.areCellsAvailable board
-
-
-{-| Calculates the coordinates of the blocks of the supplied dropping shape on board. The dropping shape's blocks'
-coordinates are relative to the coordinates of the shape itself.
--}
-calcShapeBlocksBoardCoords : DroppingShape -> List Coord
-calcShapeBlocksBoardCoords { gridCoord, shape } =
-    let
-        ( shapeX, shapeY ) =
-            gridCoord
-    in
-    Shape.data shape
-        |> .blocks
-        |> List.map (\( x, y ) -> ( x + shapeX, y + shapeY ))
+    DroppingShape.calcShapeBlocksBoardCoords droppingShape |> GameBoard.areCellsAvailable board
 
 
 {-| Gets all the blocks that are currently in the game, including landed blocks and ones that are part of the dropping
@@ -407,7 +385,7 @@ blocks (Game { board, state }) =
                     Shape.data droppingShape.shape
 
                 droppingShapeBlocks =
-                    calcShapeBlocksBoardCoords droppingShape |> List.map (\coord -> ( coord, colour ))
+                    DroppingShape.calcShapeBlocksBoardCoords droppingShape |> BoardView.withColour colour
 
                 canDropMore =
                     isValidPosition board { droppingShape | gridCoord = nextCoord Down droppingShape.gridCoord }

@@ -19,9 +19,6 @@ module HighlightAnimation exposing
 {-| This module controls animation of blocks, used when a dropping shape is about to land (which is animated by fading
 it out then back in) and when one or more rows are about to disappear (which is animated by "flashing" the row(s)
 briefly.
-
-This module has its own model/msg/update/subscriptions/etc., which the main module has to "map" in the usual way.
-
 -}
 
 import BlockColour exposing (BlockColour)

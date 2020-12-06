@@ -1,9 +1,17 @@
 module WelcomeScreen exposing (Model, Msg, init, subscriptions, update, view)
 
+{-| This module contains all functionality related to the welcome screen. Manages the animations shown here.
+-}
+
 import BlockColour exposing (BlockColour)
 import BoardView
 import Coord exposing (Coord)
+import DroppingShape exposing (DroppingShape)
 import Element exposing (Element)
+import Element.Background
+import Element.Border
+import Element.Font
+import Element.Input
 import HighlightAnimation
 import Random
 import RandomShapeGenerator
@@ -16,18 +24,21 @@ import UIHelpers
 -- MODEL
 
 
+{-| Represents a letter in the word "TETRIS", as a shape on a board, much like a normal Tetris shape.
+-}
 type alias Letter =
     { blocks : List Coord, colour : BlockColour, gridCoord : Coord }
 
 
+{-| The model of this module, exposed as an opaque type. Defines the three stages of the animation shows on the Welcome
+screen:
 
--- TODO: same as DroppingShape alias in Game. Put somewhere common and reuse definition here?
+  - `DroppingLetters`: The letters of the word "Tetris" are dropping onto the board, one by one.
+  - `PulsingLetters`: The letters of the word "Tetris" are being "pulsed" (faded out then back in).
+  - `DroppingRandomShapes`: Random shapes are dropping from the top of the board down till they disappear, behind the
+    letters of Tetris.
 
-
-type alias DroppingShape =
-    { shape : Shape, gridCoord : Coord }
-
-
+-}
 type Model
     = DroppingLetters { dropped : List Letter, dropping : Letter, next : List Letter }
     | PulsingLetters { letters : List Letter, animation : HighlightAnimation.Model }
@@ -54,23 +65,23 @@ init =
 
 
 type Msg
-    = ProgressLetterDropAnimationRequested
-    | GotHighlightAnimationMsg HighlightAnimation.Msg
-    | RandomShapeGenerated { shape : Shape, xCoord : Int }
-    | ShapeDropDelayElapsed
+    = LetterDropAnimationFrame -- A letter should be dropped another row (or a new letter added)
+    | GotHighlightAnimationMsg HighlightAnimation.Msg -- A pulsing animation frame has occurred
+    | RandomShapeGenerated { shape : Shape, xCoord : Int } -- Random shape generated and should be added
+    | ShapeDropDelayElapsed -- The delay between each time the dropping shapes are lowered a row has elapsed
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( msg, model ) of
-        ( ProgressLetterDropAnimationRequested, DroppingLetters data ) ->
-            ( progressLetterDropAnimation data, Cmd.none )
+        ( LetterDropAnimationFrame, DroppingLetters data ) ->
+            ( onLetterDropAnimationFrame data, Cmd.none )
 
-        ( ProgressLetterDropAnimationRequested, _ ) ->
+        ( LetterDropAnimationFrame, _ ) ->
             ( model, Cmd.none )
 
         ( GotHighlightAnimationMsg highlightAnimationMsg, PulsingLetters data ) ->
-            progressPulsingLettersAnimation model highlightAnimationMsg data
+            onPulsingLettersAnimationFrame model highlightAnimationMsg data
 
         ( GotHighlightAnimationMsg _, _ ) ->
             ( model, Cmd.none )
@@ -94,8 +105,12 @@ update msg model =
             ( model, Cmd.none )
 
 
-progressLetterDropAnimation : { dropped : List Letter, dropping : Letter, next : List Letter } -> Model
-progressLetterDropAnimation { dropped, dropping, next } =
+{-| Called when the animation for dropping letters has progressed a frame. Either drops the current letter down one, adds
+a new letter to be dropped, or progresses to the next stage once all letters have dropped (i.e. to the `PulsingLetters`
+stage).
+-}
+onLetterDropAnimationFrame : { dropped : List Letter, dropping : Letter, next : List Letter } -> Model
+onLetterDropAnimationFrame { dropped, dropping, next } =
     let
         ( gridX, gridY ) =
             dropping.gridCoord
@@ -127,8 +142,12 @@ progressLetterDropAnimation { dropped, dropping, next } =
         DroppingLetters { dropped = dropped, dropping = { dropping | gridCoord = ( gridX, gridY - 1 ) }, next = next }
 
 
-progressPulsingLettersAnimation : Model -> HighlightAnimation.Msg -> { letters : List Letter, animation : HighlightAnimation.Model } -> ( Model, Cmd Msg )
-progressPulsingLettersAnimation model msg pulsingLettersData =
+{-| Called when the animation for pulsing letters has progressed a frame. Delegates the work to the `HighlightAnimation`
+module then, based on its result, either continues the current animation or progresses to the next stage (i.e. the
+`DroppingRandomShapes` stage).
+-}
+onPulsingLettersAnimationFrame : Model -> HighlightAnimation.Msg -> { letters : List Letter, animation : HighlightAnimation.Model } -> ( Model, Cmd Msg )
+onPulsingLettersAnimationFrame model msg pulsingLettersData =
     case HighlightAnimation.update msg pulsingLettersData.animation of
         HighlightAnimation.IgnoreMsg ->
             ( model, Cmd.none )
@@ -140,6 +159,10 @@ progressPulsingLettersAnimation model msg pulsingLettersData =
             ( DroppingRandomShapes { letters = pulsingLettersData.letters, droppingShapes = [] }, generateRandomShape )
 
 
+{-| Handles the case when the dropping shapes should be dropped one row. Moves all shapes down one row, possibly removing
+some if they've now dropped off the bottom of the board, and also potentially building a command to generate a new
+random shape.
+-}
 handleShapeDropDelayElapsed : { letters : List Letter, droppingShapes : List DroppingShape } -> ( Model, Cmd Msg )
 handleShapeDropDelayElapsed ({ droppingShapes } as data) =
     let
@@ -175,6 +198,9 @@ handleShapeDropDelayElapsed ({ droppingShapes } as data) =
     ( DroppingRandomShapes { data | droppingShapes = nextDroppingShapes }, cmd )
 
 
+{-| Generates a random dropping shape, i.e. one of the shapes in the game, rotated a random number of times (between 0 and
+3), with a random x-coordinate, ready to start dropping down the board.
+-}
 generateRandomShape : Cmd Msg
 generateRandomShape =
     Random.map3 (\shape xCoord turns -> { shape = rotateXTimes turns shape, xCoord = xCoord })
@@ -184,6 +210,8 @@ generateRandomShape =
         |> Random.generate RandomShapeGenerated
 
 
+{-| Rotates the given shape the given number of turns.
+-}
 rotateXTimes : Int -> Shape -> Shape
 rotateXTimes turns shape =
     List.range 1 turns |> List.foldl (\_ shape_ -> Shape.rotate Shape.Clockwise shape_) shape
@@ -217,8 +245,23 @@ view model startGameMsg =
     in
     Element.column [ Element.spacingXY 0 25 ]
         [ BoardView.view boardViewConfig (droppingShapeBlocks ++ letterBlocks) maybeAnimation
-        , Element.row [ Element.centerX ] [ UIHelpers.button "Start Game" startGameMsg ]
+        , Element.row [ Element.centerX ] [ button "Start Game" startGameMsg ]
         ]
+
+
+button : String -> msg -> Element msg
+button caption msg =
+    Element.Input.button
+        [ Element.Background.color UIHelpers.mainBackgroundColour
+        , Element.Font.color UIHelpers.buttonBorderColor
+        , Element.Border.color UIHelpers.buttonBorderColor
+        , Element.Border.width 2
+        , Element.Border.rounded 20
+        , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
+        ]
+        { onPress = Just msg
+        , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)
+        }
 
 
 {-| The configuration required to render the board in the welcome screen.
@@ -228,36 +271,28 @@ boardViewConfig =
     { cellSize = 15, rowCount = 15, colCount = 80, borderStyle = BoardView.Fade UIHelpers.mainBackgroundColour }
 
 
+{-| Converts the list of letters to the list of blocks to use to render them on the board.
+-}
 lettersToBoardBlocks : List Letter -> List ( Coord, BlockColour )
-lettersToBoardBlocks =
-    List.map letterToBoardBlocks >> List.concat
+lettersToBoardBlocks letters =
+    letters
+        |> List.concatMap
+            (\{ blocks, colour, gridCoord } ->
+                blocks
+                    |> DroppingShape.calcBoardCoords gridCoord
+                    |> BoardView.withColour colour
+            )
 
 
-letterToBoardBlocks : Letter -> List ( Coord, BlockColour )
-letterToBoardBlocks { blocks, colour, gridCoord } =
-    let
-        ( gridX, gridY ) =
-            gridCoord
-    in
-    -- TODO: this is v similar to Game.calcShapeBlocksBoardCoords - poss create shared module for stuff related to drawing blocks on the board?
-    -- There's more in this module that's similar, e.g. dropping a shape one row, etc. Could also go into a shared module.
-    blocks
-        |> List.map (\( x, y ) -> ( x + gridX, y + gridY ))
-        |> List.map (\coord -> ( coord, colour ))
-
-
+{-| Converts supplied `DroppingShape` to the list of blocks to use to render it on the board.
+-}
 droppingShapeToBoardBlocks : DroppingShape -> List ( Coord, BlockColour )
-droppingShapeToBoardBlocks { shape, gridCoord } =
-    -- TODO: is this just a duplicate of Game.calcShapeBlocksBoardCoords? Put somewhere common.
+droppingShapeToBoardBlocks droppingShape =
     let
-        ( shapeX, shapeY ) =
-            gridCoord
-
-        { blocks, colour } =
-            Shape.data shape
+        { colour } =
+            Shape.data droppingShape.shape
     in
-    blocks
-        |> List.map (\( x, y ) -> ( ( x + shapeX, y + shapeY ), colour ))
+    DroppingShape.calcShapeBlocksBoardCoords droppingShape |> BoardView.withColour colour
 
 
 
@@ -268,7 +303,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
         DroppingLetters _ ->
-            Time.every 50 <| always ProgressLetterDropAnimationRequested
+            Time.every 50 <| always LetterDropAnimationFrame
 
         PulsingLetters { animation } ->
             HighlightAnimation.subscriptions animation |> Sub.map GotHighlightAnimationMsg

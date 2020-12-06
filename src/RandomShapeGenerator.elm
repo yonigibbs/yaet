@@ -1,5 +1,8 @@
 module RandomShapeGenerator exposing (generator)
 
+{-| This module provides the ability to generate random shapes (of random colours).
+-}
+
 import Array exposing (Array)
 import BlockColour exposing (BlockColour)
 import Random
@@ -42,4 +45,8 @@ randomColourGenerator =
 randomShapeBuilderGenerator : Random.Generator Shape.ShapeBuilder
 randomShapeBuilderGenerator =
     Random.int 0 (Array.length allShapeBuilders - 1)
-        |> Random.map (\index -> Array.get index allShapeBuilders |> Maybe.withDefault (Tuple.first Shape.builders))
+        |> Random.map
+            (\index ->
+                Array.get index allShapeBuilders
+                    |> Maybe.withDefault (Tuple.first Shape.builders)
+            )

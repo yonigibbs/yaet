@@ -64,20 +64,11 @@ type Msg
 -- UPDATE
 
 
-updateSubModel : (subModel -> Model) -> (subMsg -> Msg) -> ( subModel, Cmd subMsg ) -> ( Model, Cmd Msg )
-updateSubModel subModelMapper subMsgMapper ( subModel, subCmd ) =
-    ( subModelMapper subModel, Cmd.map subMsgMapper subCmd )
-
-
-startNewGame =
-    UserGame.init |> updateSubModel Playing GotPlayingGameMsg
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model, msg ) of
         ( Welcome _, StartGameRequested ) ->
-            startNewGame
+            UserGame.init |> updateSubModel Playing GotPlayingGameMsg
 
         ( _, StartGameRequested ) ->
             ( model, Cmd.none )
@@ -111,6 +102,11 @@ update msg model =
 
         ( _, GotGameOverMsg _ ) ->
             ( model, Cmd.none )
+
+
+updateSubModel : (subModel -> Model) -> (subMsg -> Msg) -> ( subModel, Cmd subMsg ) -> ( Model, Cmd Msg )
+updateSubModel subModelMapper subMsgMapper ( subModel, subCmd ) =
+    ( subModelMapper subModel, Cmd.map subMsgMapper subCmd )
 
 
 

@@ -1,4 +1,7 @@
-module UIHelpers exposing (button, buttonBorderColor, edges, mainBackgroundColour)
+module UIHelpers exposing (buttonBorderColor, edges, mainBackgroundColour)
+
+{-| Miscellaneous helper functions related to the UI/rendering.
+-}
 
 import Element exposing (Element)
 import Element.Background
@@ -23,25 +26,8 @@ mainBackgroundColour =
     Element.rgb255 30 30 30
 
 
+{-| The colour to put on buttons.
+-}
 buttonBorderColor : Element.Color
 buttonBorderColor =
     Element.rgb255 198 195 195
-
-
-
--- TODO: currently only used in welcome screen - poss don't need in this module? Poss don't need this module at all?
-
-
-button : String -> msg -> Element msg
-button caption msg =
-    Element.Input.button
-        [ Element.Background.color mainBackgroundColour
-        , Element.Font.color buttonBorderColor
-        , Element.Border.color buttonBorderColor
-        , Element.Border.width 2
-        , Element.Border.rounded 20
-        , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
-        ]
-        { onPress = Just msg
-        , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)
-        }

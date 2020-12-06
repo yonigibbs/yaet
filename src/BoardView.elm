@@ -1,4 +1,4 @@
-module BoardView exposing (BorderStyle(..), Config, view, withOpacity)
+module BoardView exposing (BlockViewInfo, BorderStyle(..), Config, view, withColour, withOpacity)
 
 {-| This module is responsible for rendering a board (typically during a game, but also used in the welcome screen).
 
@@ -41,6 +41,8 @@ type BorderStyle
     | Fade Element.Color
 
 
+{-| Describes a block to be rendered, namely its coordinates on the board, its colour, and its opacity.
+-}
 type alias BlockViewInfo =
     { coord : Coord, colour : BlockColour, opacity : Float }
 
@@ -101,12 +103,23 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
         )
 
 
+{-| Converts a list of tuples containing coordinates and colour into a list of `BlockViewInfo`, by setting the specified
+opacity on each one (and converting the tuples to records).
+-}
 withOpacity : Float -> List ( Coord, BlockColour ) -> List BlockViewInfo
 withOpacity opacity blocks =
     blocks |> List.map (\( coord, colour ) -> { coord = coord, colour = colour, opacity = opacity })
 
 
-{-| Renders the border of the board.
+{-| Converts a list of coordinates to a tuple containing the coordinates and the given colour.
+-}
+withColour : BlockColour -> List Coord -> List ( Coord, BlockColour )
+withColour colour coords =
+    coords |> List.map (\coord -> ( coord, colour ))
+
+
+{-| Renders an overlay of the given colour which is transparent in the middle but gradually increases its opacity, which
+provides the effect of the edges of the board "fading out".
 -}
 fadeEdgesOverlay : Color -> List (Svg msg)
 fadeEdgesOverlay colourToFadeTo =
