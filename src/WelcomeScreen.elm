@@ -2,8 +2,10 @@ module WelcomeScreen exposing (Model, Msg, init, subscriptions, update, view)
 
 import BlockColour exposing (BlockColour)
 import BoardView
+import Browser.Events
 import Coord exposing (Coord)
 import Element exposing (Element)
+import HighlightAnimation
 import Time
 import UIHelpers
 
@@ -18,7 +20,11 @@ type alias Letter =
 
 type Model
     = DroppingLetters { dropped : List Letter, dropping : Letter, next : List Letter }
-    | Pulse { letters : List Letter }
+    | Pulse
+        { letters : List Letter
+
+        -- , animation : HighlightAnimation.Model
+        }
 
 
 init : Model
@@ -78,7 +84,20 @@ progressLetterDropAnimation { dropped, dropping, next } =
 
             [] ->
                 -- All letters now dropped
-                Pulse { letters = dropping :: dropped }
+                -- TODO: the 1000 below is same value as in UserGame.startNewGame - create common constant somewhere?
+                let
+                    letters =
+                        dropping :: dropped
+                in
+                Pulse
+                    { letters = letters
+
+                    --, animation =
+                    --    HighlightAnimation.startNewAnimation HighlightAnimation.initialId
+                    --        HighlightAnimation.ShapeLanding
+                    --        1000
+                    --        (lettersToBoardBlocks letters)
+                    }
 
     else
         -- The currently dropping letter can drop one more row
@@ -139,7 +158,6 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
         DroppingLetters _ ->
-            -- TODO: is 50ms right here?
             Time.every 50 <| always ProgressLetterDropAnimationRequested
 
         _ ->

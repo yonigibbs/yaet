@@ -189,7 +189,7 @@ handleMoveResult currentPlayingModel moveResult =
                     -- current animation).
                     case currentPlayingModel.highlightAnimation of
                         Nothing ->
-                            startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding [ generateRandomShapeCmd ]
+                            ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding, generateRandomShapeCmd )
                                 |> continueFromModelCmdTuple
 
                         Just currentAnimation ->
@@ -206,7 +206,7 @@ handleMoveResult currentPlayingModel moveResult =
                                     generateRandomShapeCmd
 
                             else
-                                startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding [ generateRandomShapeCmd ]
+                                ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding, generateRandomShapeCmd )
                                     |> continueFromModelCmdTuple
 
         Game.RowBeingRemoved { game } ->
@@ -214,7 +214,7 @@ handleMoveResult currentPlayingModel moveResult =
                 nextBlocks =
                     Game.blocks game
             in
-            startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.RowRemoval [ generateRandomShape ]
+            ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.RowRemoval, generateRandomShape )
                 |> continueFromModelCmdTuple
 
         Game.GameOver { game } ->
@@ -228,25 +228,23 @@ continueFromModelCmdTuple ( model, cmd ) =
 
 {-| Starts a new animation.
 -}
-startNewAnimation : PlayingModel -> Game -> Game.GameBlockInfo -> HighlightAnimation.Type -> List (Cmd Msg) -> ( Model, Cmd Msg )
-startNewAnimation currentPlayingModel game blocks animationType extraCmds =
+startNewAnimation : PlayingModel -> Game -> Game.GameBlockInfo -> HighlightAnimation.Type -> Model
+startNewAnimation currentPlayingModel game blocks animationType =
     let
-        ( animationModel, animationMsg ) =
+        animationModel =
             HighlightAnimation.startNewAnimation
                 currentPlayingModel.nextAnimationId
                 animationType
                 currentPlayingModel.timerDropDelay
                 blocks.highlighted
     in
-    ( Playing
+    Playing
         { currentPlayingModel
             | game = game
             , normalBlocks = blocks.normal
             , nextAnimationId = HighlightAnimation.nextAnimationId currentPlayingModel.nextAnimationId
             , highlightAnimation = Just animationModel
         }
-    , Cmd.batch <| [ Cmd.map HighlightAnimationMsg animationMsg ] ++ extraCmds
-    )
 
 
 {-| Handles a message from the `HighlightAnimation` module. Passes the message to that module to handle then based on the
@@ -262,10 +260,8 @@ handleAnimationMsg model msg =
                         HighlightAnimation.IgnoreMsg ->
                             Continue model Cmd.none
 
-                        HighlightAnimation.Continue ( nextAnimationModel, nextAnimationCmd ) ->
-                            Continue
-                                (Playing { playingModel | highlightAnimation = Just nextAnimationModel })
-                                (Cmd.map HighlightAnimationMsg nextAnimationCmd)
+                        HighlightAnimation.Continue nextAnimationModel ->
+                            Continue (Playing { playingModel | highlightAnimation = Just nextAnimationModel }) Cmd.none
 
                         HighlightAnimation.Complete ->
                             case HighlightAnimation.highlightAnimationType currentAnimation of

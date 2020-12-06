@@ -5,12 +5,14 @@ of the actual game to `GameView`. It's responsible for passing user/timer events
 the game accordingly.
 -}
 
+import BlockColour
 import Browser
 import Element exposing (Element)
 import Element.Background
-import Game exposing (Game)
+import Game
 import GameOver
 import Html exposing (Html)
+import Shape
 import UIHelpers exposing (edges)
 import UserGame
 import WelcomeScreen
@@ -32,12 +34,15 @@ main =
 init : () -> ( Model, Cmd Msg )
 init _ =
     -- TODO: remove this temp code - useful when testing the Game Over UI
-    --initGameOver <|
-    --    Game.new
-    --        { initialShape = BlockColour.Blue |> (Shape.builders |> Tuple.first)
-    --        , nextShape = BlockColour.Red |> (Shape.builders |> Tuple.first)
-    --        , shapeBuffer = []
-    --        }
+    --let
+    --    newGame =
+    --        Game.new
+    --            { initialShape = BlockColour.Blue |> (Shape.builders |> Tuple.first)
+    --            , nextShape = BlockColour.Red |> (Shape.builders |> Tuple.first)
+    --            , shapeBuffer = []
+    --            }
+    --in
+    --( GameOver <| GameOver.init newGame, Cmd.none )
     ( Welcome WelcomeScreen.init, Cmd.none )
 
 
@@ -92,7 +97,7 @@ update msg model =
                     ( nextPlayingModel, nextPlayingCmd ) |> updateSubModel Playing GotPlayingGameMsg
 
                 UserGame.GameOver game ->
-                    initGameOver game
+                    ( GameOver <| GameOver.init game, Cmd.none )
 
         ( _, GotPlayingGameMsg _ ) ->
             ( model, Cmd.none )
@@ -107,15 +112,6 @@ update msg model =
 
         ( _, GotGameOverMsg _ ) ->
             ( model, Cmd.none )
-
-
-initGameOver : Game -> ( Model, Cmd Msg )
-initGameOver game =
-    let
-        ( subModel, subCmd ) =
-            GameOver.init game
-    in
-    ( GameOver subModel, Cmd.map GotGameOverMsg subCmd )
 
 
 
@@ -167,5 +163,5 @@ subscriptions model =
         Playing playingModel ->
             UserGame.subscriptions playingModel |> Sub.map GotPlayingGameMsg
 
-        GameOver gameOverModel ->
-            GameOver.subscriptions gameOverModel |> Sub.map GotGameOverMsg
+        GameOver _ ->
+            GameOver.subscriptions |> Sub.map GotGameOverMsg
