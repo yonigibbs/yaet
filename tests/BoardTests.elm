@@ -6,9 +6,9 @@ way. Instead, we start off with an empty board, then build it up by appending ce
 
 import AsciiGrid
 import BlockColour exposing (BlockColour)
-import Board exposing (Board)
 import Coord exposing (Coord)
 import Expect
+import GameBoard exposing (GameBoard)
 import Test exposing (Test, describe, test)
 
 
@@ -89,7 +89,7 @@ occupiedCellsTest testDescr asciiBoard expectedOccupiedCells =
     test testDescr <|
         \_ ->
             buildBoard asciiBoard
-                |> Board.occupiedCells
+                |> GameBoard.occupiedCells
                 |> List.sortBy Tuple.first
                 |> Expect.equal (expectedOccupiedCells |> List.sortBy Tuple.first)
 
@@ -103,7 +103,7 @@ areCellsAvailableTest testDescr asciiBoard asciiShape expectedAvailable =
                     AsciiGrid.build asciiShape AsciiGrid.blockColourConfig |> List.map Tuple.first
             in
             buildBoard asciiBoard
-                |> (\board -> Board.areCellsAvailable board shapeCoords)
+                |> (\board -> GameBoard.areCellsAvailable board shapeCoords)
                 |> Expect.equal expectedAvailable
 
 
@@ -112,16 +112,16 @@ appendTest testDescr orgBoard newBlocks expectedBoard =
     test testDescr <|
         \_ ->
             AsciiGrid.build newBlocks AsciiGrid.blockColourConfig
-                |> List.foldl (\( coord, colour ) board -> Board.append board colour [ coord ]) (buildBoard orgBoard)
-                |> Board.occupiedCells
+                |> List.foldl (\( coord, colour ) board -> GameBoard.append board colour [ coord ]) (buildBoard orgBoard)
+                |> GameBoard.occupiedCells
                 |> List.sortBy Tuple.first
-                |> Expect.equal (buildBoard expectedBoard |> Board.occupiedCells |> List.sortBy Tuple.first)
+                |> Expect.equal (buildBoard expectedBoard |> GameBoard.occupiedCells |> List.sortBy Tuple.first)
 
 
 {-| Builds a board from the supplied ASCII grid. The supplied grid doesn't need to be the full 10x20: just whatever
 portion contains occupied cells.
 -}
-buildBoard : String -> Board
+buildBoard : String -> GameBoard
 buildBoard asciiBoard =
     AsciiGrid.build asciiBoard AsciiGrid.blockColourConfig
-        |> List.foldl (\( coord, colour ) board -> Board.append board colour [ coord ]) Board.emptyBoard
+        |> List.foldl (\( coord, colour ) board -> GameBoard.append board colour [ coord ]) GameBoard.emptyBoard
