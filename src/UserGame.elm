@@ -351,7 +351,9 @@ view model =
                     BoardView.view boardViewConfig [] Nothing
 
                 Playing { normalBlocks, highlightAnimation } ->
-                    BoardView.view boardViewConfig normalBlocks highlightAnimation
+                    BoardView.view boardViewConfig
+                        (BoardView.withOpacity 1 normalBlocks)
+                        highlightAnimation
     in
     Element.column [] [ boardView ]
 

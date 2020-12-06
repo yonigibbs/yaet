@@ -1,4 +1,4 @@
-module BoardView exposing (BorderStyle(..), Config, view)
+module BoardView exposing (BorderStyle(..), Config, view, withOpacity)
 
 {-| This module is responsible for rendering a board (typically during a game, but also used in the welcome screen).
 
@@ -41,9 +41,13 @@ type BorderStyle
     | Fade Element.Color
 
 
+type alias BlockViewInfo =
+    { coord : Coord, colour : BlockColour, opacity : Float }
+
+
 {-| Renders the current state of the board into an HTML element, using SVG.
 -}
-view : Config -> List ( Coord, BlockColour ) -> Maybe HighlightAnimation.Model -> Element msg
+view : Config -> List BlockViewInfo -> Maybe HighlightAnimation.Model -> Element msg
 view ({ borderStyle } as config) normalBlocks highlightAnimation =
     let
         ( overlay, borderAttrs ) =
@@ -70,14 +74,14 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                 []
 
         normalBlocksSvg =
-            drawBlocks config 1 BlockColour.toLightColour BlockColour.toDarkColour normalBlocks
+            drawBlocks config BlockColour.toLightColour BlockColour.toDarkColour normalBlocks
 
         highlightedBlocksSvg =
             case highlightAnimation of
                 Just animation ->
                     HighlightAnimation.animatedBlocks animation
+                        |> withOpacity (HighlightAnimation.animatedOpacity animation)
                         |> drawBlocks config
-                            (HighlightAnimation.animatedOpacity animation)
                             (BlockColour.toLightColour >> HighlightAnimation.animatedColour animation)
                             (BlockColour.toDarkColour >> HighlightAnimation.animatedColour animation)
 
@@ -95,6 +99,11 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                     ++ overlay
                 )
         )
+
+
+withOpacity : Float -> List ( Coord, BlockColour ) -> List BlockViewInfo
+withOpacity opacity blocks =
+    blocks |> List.map (\( coord, colour ) -> { coord = coord, colour = colour, opacity = opacity })
 
 
 {-| Renders the border of the board.
@@ -124,11 +133,11 @@ fadeEdgesOverlay colourToFadeTo =
 
 {-| Draws the supplied blocks using the given functions to get the actual colours to apply to each one.
 -}
-drawBlocks : Config -> Float -> (BlockColour -> Color) -> (BlockColour -> Color) -> List ( Coord, BlockColour ) -> List (Svg msg)
-drawBlocks config opacity toLightColour toDarkColour blocks =
+drawBlocks : Config -> (BlockColour -> Color) -> (BlockColour -> Color) -> List BlockViewInfo -> List (Svg msg)
+drawBlocks config toLightColour toDarkColour blocks =
     blocks
         |> List.map
-            (\( coord, colour ) -> drawBlock config coord opacity (toLightColour colour) (toDarkColour colour))
+            (\{ coord, colour, opacity } -> drawBlock config coord opacity (toLightColour colour) (toDarkColour colour))
         |> List.concat
 
 

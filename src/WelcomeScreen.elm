@@ -20,36 +20,33 @@ type alias Letter =
     { blocks : List Coord, colour : BlockColour, gridCoord : Coord }
 
 
+
+-- TODO: same as DroppingShape alias in Game. Put somewhere common and reuse definition here?
+
+
+type alias DroppingShape =
+    { shape : Shape, gridCoord : Coord }
+
+
 type Model
     = DroppingLetters { dropped : List Letter, dropping : Letter, next : List Letter }
     | PulsingLetters { letters : List Letter, animation : HighlightAnimation.Model }
-      -- TODO: droppingShape below is same as DroppingShape alias in Game. Put somewhere common and reuse definition here?
-    | DroppingRandomShapes { letters : List Letter, droppingShape : Maybe { shape : Shape, gridCoord : Coord } }
+    | DroppingRandomShapes { letters : List Letter, droppingShapes : List DroppingShape }
 
 
 init : Model
 init =
     DroppingLetters
         { dropped = []
-        , dropping = { blocks = tBlocks, colour = BlockColour.Blue, gridCoord = ( 35, initialLetterYCoord ) }
+        , dropping = { blocks = tBlocks, colour = BlockColour.Blue, gridCoord = ( 25, boardViewConfig.rowCount ) }
         , next =
-            [ { blocks = eBlocks, colour = BlockColour.Red, gridCoord = ( 41, initialLetterYCoord ) }
-            , { blocks = tBlocks, colour = BlockColour.Orange, gridCoord = ( 46, initialLetterYCoord ) }
-            , { blocks = rBlocks, colour = BlockColour.Yellow, gridCoord = ( 52, initialLetterYCoord ) }
-            , { blocks = iBlocks, colour = BlockColour.Purple, gridCoord = ( 57, initialLetterYCoord ) }
-            , { blocks = sBlocks, colour = BlockColour.Green, gridCoord = ( 59, initialLetterYCoord ) }
+            [ { blocks = eBlocks, colour = BlockColour.Red, gridCoord = ( 31, boardViewConfig.rowCount ) }
+            , { blocks = tBlocks, colour = BlockColour.Orange, gridCoord = ( 36, boardViewConfig.rowCount ) }
+            , { blocks = rBlocks, colour = BlockColour.Yellow, gridCoord = ( 42, boardViewConfig.rowCount ) }
+            , { blocks = iBlocks, colour = BlockColour.Purple, gridCoord = ( 47, boardViewConfig.rowCount ) }
+            , { blocks = sBlocks, colour = BlockColour.Green, gridCoord = ( 49, boardViewConfig.rowCount ) }
             ]
         }
-
-
-initialLetterYCoord : Int
-initialLetterYCoord =
-    20
-
-
-lastLetterYCoord : Int
-lastLetterYCoord =
-    7
 
 
 
@@ -79,9 +76,11 @@ update msg model =
             ( model, Cmd.none )
 
         ( RandomShapeGenerated { shape, xCoord }, DroppingRandomShapes data ) ->
-            -- TODO: rename initialLetterYCoord to be less letter-specific? Also used for name below
+            -- Add the new dropping shape into the list.
             ( DroppingRandomShapes
-                { data | droppingShape = Just { shape = shape, gridCoord = ( xCoord, initialLetterYCoord ) } }
+                { data
+                    | droppingShapes = { shape = shape, gridCoord = ( xCoord, boardViewConfig.rowCount ) } :: data.droppingShapes
+                }
             , Cmd.none
             )
 
@@ -101,7 +100,7 @@ progressLetterDropAnimation { dropped, dropping, next } =
         ( gridX, gridY ) =
             dropping.gridCoord
     in
-    if gridY == lastLetterYCoord then
+    if gridY == 4 then
         -- The currently dropping letter has reached the bottom - start the next letter
         case next of
             nextLetter :: restLetters ->
@@ -138,38 +137,56 @@ progressPulsingLettersAnimation model msg pulsingLettersData =
             ( PulsingLetters { pulsingLettersData | animation = nextAnimationModel }, Cmd.none )
 
         HighlightAnimation.Complete ->
-            ( DroppingRandomShapes { letters = pulsingLettersData.letters, droppingShape = Nothing }, generateRandomShape )
+            ( DroppingRandomShapes { letters = pulsingLettersData.letters, droppingShapes = [] }, generateRandomShape )
 
 
-handleShapeDropDelayElapsed : { letters : List Letter, droppingShape : Maybe { shape : Shape, gridCoord : Coord } } -> ( Model, Cmd Msg )
-handleShapeDropDelayElapsed data =
-    case data.droppingShape of
-        Just droppingShape ->
+handleShapeDropDelayElapsed : { letters : List Letter, droppingShapes : List DroppingShape } -> ( Model, Cmd Msg )
+handleShapeDropDelayElapsed ({ droppingShapes } as data) =
+    let
+        -- Decides what to do with this dropping shape - either lowers it by one row (returning it in a `Just`) or
+        -- returns `Nothing`, indicating this shape should be removed.
+        processDroppingShape : DroppingShape -> Maybe DroppingShape
+        processDroppingShape droppingShape =
             let
                 ( x, y ) =
                     droppingShape.gridCoord
             in
-            if y == 0 then
-                -- Reached the bottom - kill this shape and request another.
-                ( DroppingRandomShapes { data | droppingShape = Nothing }, generateRandomShape )
+            if y < (-1 * (Shape.data droppingShape.shape).gridSize) then
+                -- The shape is now definitely below the grid, so remove it
+                Nothing
 
             else
-                ( DroppingRandomShapes
-                    { data | droppingShape = Just { shape = droppingShape.shape, gridCoord = ( x, y - 1 ) } }
-                , Cmd.none
-                )
+                Just { shape = droppingShape.shape, gridCoord = ( x, y - 1 ) }
 
-        Nothing ->
-            -- We don't have a shape so can't drop anything
-            ( DroppingRandomShapes data, Cmd.none )
+        nextDroppingShapes =
+            List.map processDroppingShape droppingShapes |> List.filterMap identity
+
+        -- Whenever a shape is on row 9 add a new shape at the top
+        needNewShape =
+            droppingShapes |> List.any (\{ gridCoord } -> Tuple.second gridCoord == 9)
+
+        cmd =
+            if needNewShape then
+                generateRandomShape
+
+            else
+                Cmd.none
+    in
+    ( DroppingRandomShapes { data | droppingShapes = nextDroppingShapes }, cmd )
 
 
 generateRandomShape : Cmd Msg
 generateRandomShape =
-    Random.map2 (\shape xCoord -> { shape = shape, xCoord = xCoord })
+    Random.map3 (\shape xCoord turns -> { shape = rotateXTimes turns shape, xCoord = xCoord })
         RandomShapeGenerator.generator
         (Random.int 20 60)
+        (Random.int 0 3)
         |> Random.generate RandomShapeGenerated
+
+
+rotateXTimes : Int -> Shape -> Shape
+rotateXTimes turns shape =
+    List.range 1 turns |> List.foldl (\_ shape_ -> Shape.rotate Shape.Clockwise shape_) shape
 
 
 
@@ -179,7 +196,7 @@ generateRandomShape =
 view : Model -> msg -> Element msg
 view model startGameMsg =
     let
-        ( letters_, animation_, droppingShapeBlocks ) =
+        ( letters_, maybeAnimation, droppingShapes_ ) =
             case model of
                 DroppingLetters { dropped, dropping } ->
                     ( dropping :: dropped, Nothing, [] )
@@ -187,11 +204,19 @@ view model startGameMsg =
                 PulsingLetters { animation } ->
                     ( [], Just animation, [] )
 
-                DroppingRandomShapes { letters, droppingShape } ->
-                    ( letters, Nothing, Maybe.map droppingShapeToBoardBlocks droppingShape |> Maybe.withDefault [] )
+                DroppingRandomShapes { letters, droppingShapes } ->
+                    ( letters, Nothing, droppingShapes )
+
+        letterBlocks =
+            lettersToBoardBlocks letters_ |> BoardView.withOpacity 1
+
+        droppingShapeBlocks =
+            droppingShapes_
+                |> List.concatMap droppingShapeToBoardBlocks
+                |> BoardView.withOpacity 0.25
     in
     Element.column [ Element.spacingXY 0 25 ]
-        [ BoardView.view boardViewConfig (droppingShapeBlocks ++ lettersToBoardBlocks letters_) animation_
+        [ BoardView.view boardViewConfig (droppingShapeBlocks ++ letterBlocks) maybeAnimation
         , Element.row [ Element.centerX ] [ UIHelpers.button "Start Game" startGameMsg ]
         ]
 
@@ -200,7 +225,7 @@ view model startGameMsg =
 -}
 boardViewConfig : BoardView.Config
 boardViewConfig =
-    { cellSize = 15, rowCount = 20, colCount = 100, borderStyle = BoardView.Fade UIHelpers.mainBackgroundColour }
+    { cellSize = 15, rowCount = 15, colCount = 80, borderStyle = BoardView.Fade UIHelpers.mainBackgroundColour }
 
 
 lettersToBoardBlocks : List Letter -> List ( Coord, BlockColour )
@@ -221,7 +246,7 @@ letterToBoardBlocks { blocks, colour, gridCoord } =
         |> List.map (\coord -> ( coord, colour ))
 
 
-droppingShapeToBoardBlocks : { shape : Shape, gridCoord : Coord } -> List ( Coord, BlockColour )
+droppingShapeToBoardBlocks : DroppingShape -> List ( Coord, BlockColour )
 droppingShapeToBoardBlocks { shape, gridCoord } =
     -- TODO: is this just a duplicate of Game.calcShapeBlocksBoardCoords? Put somewhere common.
     let
@@ -233,11 +258,6 @@ droppingShapeToBoardBlocks { shape, gridCoord } =
     in
     blocks
         |> List.map (\( x, y ) -> ( ( x + shapeX, y + shapeY ), colour ))
-
-
-shapeDropDelayMs : Int
-shapeDropDelayMs =
-    500
 
 
 
@@ -253,13 +273,8 @@ subscriptions model =
         PulsingLetters { animation } ->
             HighlightAnimation.subscriptions animation |> Sub.map GotHighlightAnimationMsg
 
-        DroppingRandomShapes { droppingShape } ->
-            case droppingShape of
-                Nothing ->
-                    Sub.none
-
-                Just _ ->
-                    Time.every (toFloat shapeDropDelayMs) <| always ShapeDropDelayElapsed
+        DroppingRandomShapes _ ->
+            Time.every (toFloat 250) <| always ShapeDropDelayElapsed
 
 
 
