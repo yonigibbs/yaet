@@ -2,7 +2,6 @@ module WelcomeScreen exposing (Model, Msg, init, subscriptions, update, view)
 
 import BlockColour exposing (BlockColour)
 import BoardView
-import Browser.Events
 import Coord exposing (Coord)
 import Element exposing (Element)
 import HighlightAnimation
@@ -20,11 +19,8 @@ type alias Letter =
 
 type Model
     = DroppingLetters { dropped : List Letter, dropping : Letter, next : List Letter }
-    | Pulse
-        { letters : List Letter
-
-        -- , animation : HighlightAnimation.Model
-        }
+    | PulsingLetters { letters : List Letter, animation : HighlightAnimation.Model }
+    | DroppingRandomShapes { letters : List Letter }
 
 
 init : Model
@@ -56,6 +52,7 @@ lastLetterYCoord =
 
 type Msg
     = ProgressLetterDropAnimationRequested
+    | GotHighlightAnimationMsg HighlightAnimation.Msg
 
 
 update : Msg -> Model -> Model
@@ -65,7 +62,12 @@ update msg model =
             progressLetterDropAnimation data
 
         ( ProgressLetterDropAnimationRequested, _ ) ->
-            -- TODO: implement pulse animation
+            model
+
+        ( GotHighlightAnimationMsg highlightAnimationMsg, PulsingLetters pulsingLettersData ) ->
+            progressPulsingLettersAnimation model highlightAnimationMsg pulsingLettersData
+
+        ( GotHighlightAnimationMsg _, _ ) ->
             model
 
 
@@ -89,19 +91,32 @@ progressLetterDropAnimation { dropped, dropping, next } =
                     letters =
                         dropping :: dropped
                 in
-                Pulse
+                PulsingLetters
                     { letters = letters
-
-                    --, animation =
-                    --    HighlightAnimation.startNewAnimation HighlightAnimation.initialId
-                    --        HighlightAnimation.ShapeLanding
-                    --        1000
-                    --        (lettersToBoardBlocks letters)
+                    , animation =
+                        HighlightAnimation.startNewAnimation HighlightAnimation.initialId
+                            HighlightAnimation.ShapeLanding
+                            -- TODO: this 1000 is same hard-coded value as in UserGame.startNewGame - put somewhere common?
+                            1000
+                            (lettersToBoardBlocks letters)
                     }
 
     else
         -- The currently dropping letter can drop one more row
         DroppingLetters { dropped = dropped, dropping = { dropping | gridCoord = ( gridX, gridY - 1 ) }, next = next }
+
+
+progressPulsingLettersAnimation : Model -> HighlightAnimation.Msg -> { letters : List Letter, animation : HighlightAnimation.Model } -> Model
+progressPulsingLettersAnimation model msg pulsingLettersData =
+    case HighlightAnimation.update msg pulsingLettersData.animation of
+        HighlightAnimation.IgnoreMsg ->
+            model
+
+        HighlightAnimation.Continue nextAnimationModel ->
+            PulsingLetters { pulsingLettersData | animation = nextAnimationModel }
+
+        HighlightAnimation.Complete ->
+            DroppingRandomShapes { letters = pulsingLettersData.letters }
 
 
 
@@ -111,16 +126,19 @@ progressLetterDropAnimation { dropped, dropping, next } =
 view : Model -> msg -> Element msg
 view model startGameMsg =
     let
-        letters_ =
+        ( letters_, animation_ ) =
             case model of
                 DroppingLetters { dropped, dropping } ->
-                    dropping :: dropped
+                    ( dropping :: dropped, Nothing )
 
-                Pulse { letters } ->
-                    letters
+                PulsingLetters { letters, animation } ->
+                    ( letters, Just animation )
+
+                DroppingRandomShapes { letters } ->
+                    ( letters, Nothing )
     in
     Element.column [ Element.spacingXY 0 25 ]
-        [ BoardView.view boardViewConfig (lettersToBoardBlocks letters_) Nothing
+        [ BoardView.view boardViewConfig (lettersToBoardBlocks letters_) animation_
         , Element.row [ Element.centerX ] [ UIHelpers.button "Start Game" startGameMsg ]
         ]
 
@@ -159,6 +177,9 @@ subscriptions model =
     case model of
         DroppingLetters _ ->
             Time.every 50 <| always ProgressLetterDropAnimationRequested
+
+        PulsingLetters { animation } ->
+            HighlightAnimation.subscriptions animation |> Sub.map GotHighlightAnimationMsg
 
         _ ->
             Sub.none

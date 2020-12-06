@@ -235,7 +235,7 @@ startNewAnimation currentPlayingModel game blocks animationType =
             HighlightAnimation.startNewAnimation
                 currentPlayingModel.nextAnimationId
                 animationType
-                currentPlayingModel.timerDropDelay
+                (totalAnimationTimeForType animationType currentPlayingModel)
                 blocks.highlighted
     in
     Playing
@@ -245,6 +245,18 @@ startNewAnimation currentPlayingModel game blocks animationType =
             , nextAnimationId = HighlightAnimation.nextAnimationId currentPlayingModel.nextAnimationId
             , highlightAnimation = Just animationModel
         }
+
+
+{-| Calculates the total time use for an animation of the given type.
+-}
+totalAnimationTimeForType : HighlightAnimation.Type -> { a | timerDropDelay : Int } -> Int
+totalAnimationTimeForType animationType { timerDropDelay } =
+    case animationType of
+        HighlightAnimation.ShapeLanding ->
+            timerDropDelay
+
+        HighlightAnimation.RowRemoval ->
+            150
 
 
 {-| Handles a message from the `HighlightAnimation` module. Passes the message to that module to handle then based on the

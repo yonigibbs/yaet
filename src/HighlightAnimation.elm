@@ -152,11 +152,11 @@ handleAnimationFrame timeSinceLastFrameMs (Model modelData) =
 {-| Starts a new animation with the supplied data.
 -}
 startNewAnimation : Id -> Type -> Int -> List ( Coord, BlockColour ) -> Model
-startNewAnimation id animationType timerDropDelay blocks =
+startNewAnimation id animationType totalTimeMs blocks =
     Model
         { id = id
         , animationType = animationType
-        , totalTimeMs = totalAnimationTimeForType animationType timerDropDelay
+        , totalTimeMs = toFloat totalTimeMs
         , blocks = blocks
         , elapsedTimeMs = 0
         }
@@ -171,18 +171,6 @@ withBlocks blocks (Model model) =
 
 
 -- INFORMATION ABOUT THE MODEL
-
-
-{-| Calculates the total time use for an animation of the given type.
--}
-totalAnimationTimeForType : Type -> Int -> Float
-totalAnimationTimeForType animationType timerDropDelay =
-    case animationType of
-        ShapeLanding ->
-            toFloat timerDropDelay
-
-        RowRemoval ->
-            150
 
 
 {-| Gets the type of animation which the supplied model has.

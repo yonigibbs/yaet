@@ -5,14 +5,11 @@ of the actual game to `GameView`. It's responsible for passing user/timer events
 the game accordingly.
 -}
 
-import BlockColour
 import Browser
 import Element exposing (Element)
 import Element.Background
-import Game
 import GameOver
 import Html exposing (Html)
-import Shape
 import UIHelpers exposing (edges)
 import UserGame
 import WelcomeScreen
