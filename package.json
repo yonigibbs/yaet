@@ -5,7 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "elm-test",
-    "serve": "parcel src/index.html"
+    "serve": "parcel src/index.html",
+    "prebuild": "npm run test",
+    "build": "rm -rf deploy && parcel build src/*.html --out-dir deploy --public-url /yaet",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d deploy"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +19,7 @@
     "elm-format": "^0.8.4",
     "elm-hot": "^1.1.5",
     "elm-test": "^0.19.1-revision4",
+    "gh-pages": "^3.1.0",
     "node-elm-compiler": "^5.0.5",
     "parcel-bundler": "^1.12.4"
   }

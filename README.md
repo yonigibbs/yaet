@@ -20,13 +20,13 @@ Current state: WIP.
 - [x] Prettify the UI (add `elm-ui`?)
 - [x] Add animation to welcome screen (drop letters of Tetris, flash them  in/out, then have random shapes with lower
       opacity falling behind the letters)
+- [x] Publish on GitHub pages
 - [ ] Improve Game Over animation - drop the "Game Over" message down from top of board (use SVG for this?)
 - [ ] Constantly rotating when at the lowest possible position restarts the timer drop so user can stop the game from
       progressing at all by just holding down the rotate key.
 - [ ] Improve playability wrt long holds of buttons
 - [ ] Add key binding for dropping current piece immediately (space bar?)
-- [ ] GitHub actions for automatically running unit tests?
-- [ ] Publish on GitHub pages?
+- [ ] GitHub actions for automatically running unit tests
 - [ ] Add ability to pause game
 - [ ] Complete UI for each of the different states (instructions, playing, paused, game ended, etc)
 - [ ] Show upcoming pieces

@@ -205,7 +205,7 @@ generateRandomShape : Cmd Msg
 generateRandomShape =
     Random.map3 (\shape xCoord turns -> { shape = rotateXTimes turns shape, xCoord = xCoord })
         RandomShapeGenerator.generator
-        (Random.int 20 60)
+        (Random.int 20 55)
         (Random.int 0 3)
         |> Random.generate RandomShapeGenerated
 
