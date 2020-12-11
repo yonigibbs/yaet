@@ -6,9 +6,8 @@
   "scripts": {
     "test": "elm-test",
     "serve": "parcel src/index.html",
-    "prebuild": "npm run test",
     "build": "rm -rf deploy && parcel build src/*.html --out-dir deploy --public-url /yaet",
-    "predeploy": "npm run build",
+    "predeploy": "npm run build && npm run test",
     "deploy": "gh-pages -d deploy"
   },
   "keywords": [],
