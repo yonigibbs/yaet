@@ -4,7 +4,7 @@
 
 This repo contains a version of Tetris, written in Elm, as a learning exercise.
 
-###Play the game [here](https://yonigibbs.github.io/yaet/).
+### Play the game [here](https://yonigibbs.github.io/yaet/).
 
 Current state: **WIP.**
 
