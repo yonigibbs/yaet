@@ -1,83 +1,57 @@
-module Keyboard exposing (Key(..), KeyMessages, keyEventDecoder)
+module Keyboard exposing (Action(..), Config, buildConfig, decoder)
 
+import Dict exposing (Dict)
 import Json.Decode as JD
 
 
-{-| All keys for which we have special handling.
+{-| All actions invoked by the keyboard, for which we have special handling.
 
 TODO: make keyboard bindings configurable.
+TODO: these action types will eventually be needed on buttons, so not really keyboard specific. Put in separate module somewhere?
 
 -}
-type Key
-    = LeftArrow
-    | RightArrow
-    | DownArrow
-    | Z
-    | X
-    | Other
+type Action
+    = MoveLeft
+    | MoveRight
+    | DropOneRow
+    | RotateClockwise
+    | RotateAnticlockwise
 
 
-{-| A type mapping each key binding to a message to send when it occurs.
--}
-type alias KeyMessages msg =
-    { moveLeft : msg
-    , moveRight : msg
-    , dropOneRow : msg
-    , rotateClockwise : msg
-    , rotateAnticlockwise : msg
+type Config
+    = Config (Dict String Action)
+
+
+buildConfig :
+    { moveLeft : String
+    , moveRight : String
+    , dropOneRow : String
+    , rotateClockwise : String
+    , rotateAnticlockwise : String
     }
+    -> Config
+buildConfig { moveLeft, moveRight, dropOneRow, rotateClockwise, rotateAnticlockwise } =
+    Config <|
+        Dict.fromList
+            [ ( moveLeft, MoveLeft )
+            , ( moveRight, MoveRight )
+            , ( dropOneRow, DropOneRow )
+            , ( rotateClockwise, RotateClockwise )
+            , ( rotateAnticlockwise, RotateAnticlockwise )
+            ]
 
 
 {-| Decodes a key event, succeeding if it's one of the special keys we handle (see `Key` type), otherwise failing.
 -}
-keyEventDecoder : KeyMessages msg -> JD.Decoder msg
-keyEventDecoder messages =
-    keyDecoder
+decoder : Config -> JD.Decoder Action
+decoder (Config config) =
+    JD.field "key" JD.string
         |> JD.andThen
             (\key ->
-                case key of
-                    LeftArrow ->
-                        JD.succeed messages.moveLeft
+                case Dict.get key config of
+                    Just action ->
+                        JD.succeed action
 
-                    RightArrow ->
-                        JD.succeed messages.moveRight
-
-                    DownArrow ->
-                        JD.succeed messages.dropOneRow
-
-                    Z ->
-                        JD.succeed messages.rotateAnticlockwise
-
-                    X ->
-                        JD.succeed messages.rotateClockwise
-
-                    Other ->
+                    Nothing ->
                         JD.fail "Not a mapped key - ignoring"
             )
-
-
-keyDecoder : JD.Decoder Key
-keyDecoder =
-    JD.field "key" JD.string |> JD.map toKey
-
-
-toKey : String -> Key
-toKey keyString =
-    case keyString of
-        "ArrowLeft" ->
-            LeftArrow
-
-        "ArrowRight" ->
-            RightArrow
-
-        "ArrowDown" ->
-            DownArrow
-
-        "z" ->
-            Z
-
-        "x" ->
-            X
-
-        _ ->
-            Other

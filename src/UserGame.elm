@@ -16,6 +16,7 @@ import Element exposing (Element)
 import Game exposing (Game)
 import GameBoard
 import HighlightAnimation
+import Json.Decode as JD
 import Keyboard
 import Random
 import RandomShapeGenerator
@@ -79,16 +80,47 @@ type Msg
     | HighlightAnimationMsg HighlightAnimation.Msg -- A message from the `HighlightAnimation` module as occurred: this is passed to that module to handle.
 
 
-{-| Mapping of keyboard buttons to corresponding messages.
+{-| Configuration of the keyboard keys used to control the game.
 -}
-keyMessages : Keyboard.KeyMessages Msg
-keyMessages =
-    { moveLeft = MoveShapeRequested Game.Left
-    , moveRight = MoveShapeRequested Game.Right
-    , dropOneRow = MoveShapeRequested Game.Down
-    , rotateClockwise = RotateShapeRequested Shape.Clockwise
-    , rotateAnticlockwise = RotateShapeRequested Shape.Anticlockwise
-    }
+keyboardConfig : Keyboard.Config
+keyboardConfig =
+    -- TODO: make this configurable.
+    Keyboard.buildConfig
+        { moveLeft = "ArrowLeft"
+        , moveRight = "ArrowRight"
+        , dropOneRow = "ArrowDown"
+        , rotateClockwise = "x"
+        , rotateAnticlockwise = "z"
+        }
+
+
+{-| Map an action invoked by the user by pressing a keyboard button, to a message from this module.
+-}
+keyboardActionToMessage : Keyboard.Action -> Msg
+keyboardActionToMessage action =
+    case action of
+        Keyboard.MoveLeft ->
+            MoveShapeRequested Game.Left
+
+        Keyboard.MoveRight ->
+            MoveShapeRequested Game.Right
+
+        Keyboard.DropOneRow ->
+            MoveShapeRequested Game.Down
+
+        Keyboard.RotateClockwise ->
+            RotateShapeRequested Shape.Clockwise
+
+        Keyboard.RotateAnticlockwise ->
+            RotateShapeRequested Shape.Anticlockwise
+
+
+{-| Decoder for keyboard presses.
+-}
+keyDecoder : JD.Decoder Msg
+keyDecoder =
+    Keyboard.decoder keyboardConfig
+        |> JD.map keyboardActionToMessage
 
 
 {-| Data returned from the `update` function detailing anything the calling module needs to know, e.g. whether the game
@@ -384,7 +416,7 @@ subscriptions model =
                         |> Maybe.withDefault []
             in
             Sub.batch <|
-                [ Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
+                [ Browser.Events.onKeyDown keyDecoder
                 , Time.every (toFloat timerDropDelay) <| always TimerDropDelayElapsed
                 ]
                     ++ animationSubscription
