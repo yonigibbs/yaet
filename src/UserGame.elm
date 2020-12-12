@@ -278,9 +278,9 @@ handleAnimationMsg model msg =
                         HighlightAnimation.Complete ->
                             case HighlightAnimation.highlightAnimationType currentAnimation of
                                 HighlightAnimation.ShapeLanding ->
-                                    -- When we've finished animating a shape landing, just call `timerDrop`, which will
-                                    -- "land" that shape and move the game forward (adding a new dropping shape, etc).
-                                    Game.timerDrop playingModel.game |> handleMoveResult playingModel
+                                    -- We've finished animating a shape landing: stop animating. Whenever the timerDrop
+                                    -- subscription fires next the game will move on.
+                                    Continue (Playing { playingModel | highlightAnimation = Nothing }) Cmd.none
 
                                 HighlightAnimation.RowRemoval ->
                                     -- When we've finished animating rows about to be removed, call
@@ -377,17 +377,14 @@ subscriptions model =
 
         Playing { game, timerDropDelay, highlightAnimation } ->
             let
-                subscription =
-                    case highlightAnimation of
-                        Just animation ->
-                            -- We're in the process of animating something so don't need the `timerDrop` event to occur:
-                            -- instead we use the end of the animation to know how to move the game on.
-                            Sub.map HighlightAnimationMsg <| HighlightAnimation.subscriptions animation
-
-                        _ ->
-                            Time.every (toFloat timerDropDelay) <| always TimerDropDelayElapsed
+                animationSubscription =
+                    highlightAnimation
+                        |> Maybe.map
+                            (\animation -> [ HighlightAnimation.subscriptions animation |> Sub.map HighlightAnimationMsg ])
+                        |> Maybe.withDefault []
             in
-            Sub.batch
+            Sub.batch <|
                 [ Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
-                , subscription
+                , Time.every (toFloat timerDropDelay) <| always TimerDropDelayElapsed
                 ]
+                    ++ animationSubscription

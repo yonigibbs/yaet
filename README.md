@@ -29,7 +29,7 @@ Current state: **WIP.**
 - [x] Publish on GitHub pages
 - [x] GitHub actions for automatically running unit tests
 - [x] Complete UI for each of the different states (instructions, playing, paused, game ended, etc)
-- [ ] Constantly rotating when at the lowest possible position restarts the timer drop so user can stop the game from
+- [x] Constantly rotating when at the lowest possible position restarts the timer drop so user can stop the game from
       progressing at all by just holding down the rotate key.
 - [ ] Improve playability wrt long holds of buttons
 - [ ] Add key binding for dropping current piece immediately (space bar?)
