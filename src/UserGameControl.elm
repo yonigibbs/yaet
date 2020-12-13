@@ -74,7 +74,7 @@ update ((Model modelData) as model) msg =
 addNewRequest : Game.UserAction -> Model -> Model
 addNewRequest action (Model modelData) =
     -- TODO: is 3 the right value here?
-    Model { modelData | requests = { action = action, delayTillRepeat = 3 } :: modelData.requests }
+    Model { modelData | requests = { action = action, delayTillRepeat = 4 } :: modelData.requests }
 
 
 removeRequest : Game.UserAction -> Model -> Model
@@ -124,6 +124,9 @@ removeNonRepeatableActions =
         (\{ action } ->
             case action of
                 Game.DropToBottom ->
+                    False
+
+                Game.Rotate _ ->
                     False
 
                 _ ->
