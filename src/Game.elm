@@ -4,11 +4,11 @@ module Game exposing
     , InitialisationInfo
     , MoveDirection(..)
     , MoveResult(..)
+    , UserAction(..)
     , blocks
-    , moveShape
+    , executeUserActions
     , new
     , onRowRemovalAnimationComplete
-    , rotateShape
     , shapeGenerated
     , timerDrop
     )
@@ -75,14 +75,6 @@ type GameState
     | RowRemovalGameState { completedRowIndexes : List Int, nextDroppingShape : DroppingShape }
 
 
-{-| The direction in which a shape can be moved by the user (or automatically, in the case of `Down`).
--}
-type MoveDirection
-    = Down
-    | Left
-    | Right
-
-
 {-| Information about all the blocks currently shown in the game (both the landed blocks and the blocks in the currently
 dropping shape).
 
@@ -97,31 +89,6 @@ The type of animation isn't defined here: it's defined in `MoveResult`.
 -}
 type alias GameBlockInfo =
     { normal : List ( Coord, BlockColour ), highlighted : List ( Coord, BlockColour ) }
-
-
-{-| The result of an action (either automated by a timer or made by the user) which moves a block:
-
-  - `NoChange`: the move was rejected (e.g. trying to move a block left when it's already at the leftmost point it can
-    go on the board). The game's model hasn't changed as a result of this attempt.
-  - `Continue`: the game should continue as normal. The updated game is supplied in the variant's data, along with a
-    `newShapeRequested` boolean which, if true, means a new dropping was added to the screen, so the buffer needs filling
-    up with one more shape. The parent module should generate a random shape (asynchronously) and call `shapeGenerated`,
-    passing in that random shape, when it's available. If the game has any highlighted cells then the parent module should
-    now animate these. When that animation is complete, it should call `timerDrop` again, which will treat the dropping
-    shape as now having landed.
-  - `RowBeingRemoved`: one or more rows are being removed. This means that the parent module should now animate any
-    highlighted blocks with the animation used for rows being removed (a "flash" effect). When that animation is
-    complete, it should call `onRowRemovalAnimationComplete` again, which will remove those rows and drop all the other
-    rows accordingly. This variant implicitly means that a new shape is now required (as when rows are removed a new
-    dropping shape is always added next).
-  - `EndGame`: the game has now ended.
-
--}
-type MoveResult
-    = NoChange
-    | Continue { game : Game, newShapeRequested : Bool }
-    | RowBeingRemoved { game : Game }
-    | GameOver { game : Game }
 
 
 
@@ -168,6 +135,62 @@ initDroppingShape shape =
 -- GAME PLAY/MOVEMENT
 
 
+{-| The direction in which a shape can be moved by the user (or automatically, in the case of `Down`).
+-}
+type MoveDirection
+    = Left
+    | Right
+    | Down
+
+
+{-| An action initiated by the user.
+-}
+type UserAction
+    = Move MoveDirection
+    | DropToBottom
+    | Rotate Shape.RotationDirection
+
+
+{-| The result of executing a single user action:
+
+  - `NotAllowed`: the user action was not allowed (e.g. the user tried to move a shape left when it was already at the
+    leftmost edge of the board.
+  - `Allowed`: the user action was allowed. The newly updated dropping shape is the data associated with this variant.
+
+-}
+type UserActionResult
+    = NotAllowed
+    | Allowed DroppingShape
+
+
+{-| The result of an action (either automated by a timer or made by the user) which moves a block:
+
+  - `NoChange`: the move was rejected (e.g. trying to move a block left when it's already at the leftmost point it can
+    go on the board). The game's model hasn't changed as a result of this attempt.
+  - `Continue`: the game should continue as normal. The variant contains the following data:
+      - `game`: The updated game.
+      - `newShapeRequested`: Boolean flag which, if true, means a new dropping was added to the screen, so the buffer needs
+        filling up with one more shape. The parent module should generate a random shape (asynchronously) and call
+        `shapeGenerated`, passing in that random shape, when it's available. If the game has any highlighted cells then
+        the parent module should now animate these. When that animation is complete, it should call `timerDrop` again,
+        which will treat the dropping shape as now having landed.
+      - `shapedDropped`: Boolean flag indicated whether the currently dropping shape was dropped. If so then the timer
+        set up to automatically drop a shape every so often should be reset, now the user has done this manually.
+  - `RowBeingRemoved`: one or more rows are being removed. This means that the parent module should now animate any
+    highlighted blocks with the animation used for rows being removed (a "flash" effect). When that animation is
+    complete, it should call `onRowRemovalAnimationComplete` again, which will remove those rows and drop all the other
+    rows accordingly. This variant implicitly means that a new shape is now required (as when rows are removed a new
+    dropping shape is always added next).
+  - `EndGame`: the game has now ended.
+
+-}
+type MoveResult
+    = NoChange
+    | Continue { game : Game, newShapeRequested : Bool, shapeDropped : Bool }
+    | RowBeingRemoved { game : Game }
+    | GameOver { game : Game }
+
+
 {-| Called when the delay between automatic drops of the currently dropping shape has elapsed (i.e. initially every
 second or so). Drops the current shape one row if possible, otherwise treats it as now having landed, and uses the next
 shape as the new dropping shape.
@@ -182,7 +205,9 @@ timerDrop ((Game ({ state, board } as model)) as game) =
             in
             if isValidPosition board proposedDroppingShape then
                 -- It's valid for the currently dropping shape to go down by one row, so just do that.
-                continueWithUpdatedDroppingShape False proposedDroppingShape model
+                continueWithUpdatedDroppingShape
+                    { newShapeRequested = False, shapedDropped = True, droppingShape = proposedDroppingShape }
+                    model
 
             else
                 -- It's not valid for the currently dropping shape to go down by one row, so it must have landed.
@@ -192,18 +217,40 @@ timerDrop ((Game ({ state, board } as model)) as game) =
             NoChange
 
 
-{-| Moves the currently dropping shape in the supplied direction, if possible.
+{-| Executes the supplied of user actions (e.g. moves the dropping shape left and down, if those keys are currently
+being held down).
 -}
-moveShape : MoveDirection -> Game -> MoveResult
-moveShape direction (Game ({ state, board } as model)) =
+executeUserActions : List UserAction -> Game -> MoveResult
+executeUserActions actions (Game ({ state, board } as model)) =
     case state of
         RegularGameState { droppingShape } ->
+            -- TODO: if any of the actions is Drop with a DropType of ToBottom then ignore all other actions and
+            -- just execute that single action.
+            -- TODO: if the actions are "drop down" and "move left", and the shape is directly on top of another
+            -- it cannot be dropped down, but can be moved left, so that's all that'll happen. But it might be that
+            -- once it's moved left it _can_ now be dropped down. Consider handling this edge case.
             let
-                proposedDroppingShape =
-                    { droppingShape | gridCoord = nextCoord direction droppingShape.gridCoord }
+                -- Execute all the actions, and keep a boolean (anyChanges) which is set to true if any changes were made.
+                ( newDroppingShape, anyChanges ) =
+                    actions
+                        |> List.foldl
+                            (\action ( accDroppingShape, accAnyChanges ) ->
+                                case executeUserAction board accDroppingShape action of
+                                    NotAllowed ->
+                                        ( accDroppingShape, accAnyChanges )
+
+                                    Allowed updatedDroppingShape ->
+                                        ( updatedDroppingShape, True )
+                            )
+                            ( droppingShape, False )
+
+                shapeDropped =
+                    anyChanges && (Tuple.second droppingShape.gridCoord /= Tuple.second newDroppingShape.gridCoord)
             in
-            if isValidPosition board proposedDroppingShape then
-                continueWithUpdatedDroppingShape False proposedDroppingShape model
+            if anyChanges then
+                continueWithUpdatedDroppingShape
+                    { newShapeRequested = False, shapedDropped = shapeDropped, droppingShape = newDroppingShape }
+                    model
 
             else
                 NoChange
@@ -212,22 +259,33 @@ moveShape direction (Game ({ state, board } as model)) =
             NoChange
 
 
-{-| Rotates the currently dropping shape in the supplied direction, if possible. If this would mean that the shape moves
-off the board to either side, then the shape is "shifted back" onto the board if this is possible.
+{-| Attempts to execute the supplied user action and returns a result defining whether or not the action was allowed.
 -}
-rotateShape : Shape.RotationDirection -> Game -> MoveResult
-rotateShape direction (Game ({ state, board } as model)) =
-    case state of
-        RegularGameState { droppingShape } ->
+executeUserAction : GameBoard -> DroppingShape -> UserAction -> UserActionResult
+executeUserAction board droppingShape action =
+    case action of
+        Move direction ->
+            let
+                proposedDroppingShape =
+                    { droppingShape | gridCoord = nextCoord direction droppingShape.gridCoord }
+            in
+            if isValidPosition board proposedDroppingShape then
+                Allowed proposedDroppingShape
+
+            else
+                NotAllowed
+
+        DropToBottom ->
+            -- TODO: "Implement dropping shape to bottom"
+            NotAllowed
+
+        Rotate direction ->
             case nextValidRotatedDroppingShape { droppingShape | shape = Shape.rotate direction droppingShape.shape } board of
                 Just rotatedShape ->
-                    continueWithUpdatedDroppingShape False rotatedShape model
+                    Allowed rotatedShape
 
                 Nothing ->
-                    NoChange
-
-        RowRemovalGameState _ ->
-            NoChange
+                    NotAllowed
 
 
 {-| Gets the next valid position for a rotate shape, if one exists. Moves the shape back onto the board if its rotation
@@ -287,7 +345,9 @@ handleDroppingShapeLanded (Game ({ shapeBuffer, state, board, nextShape } as mod
                     -- No completed rows - continue as normal, but only if the new dropping shape is valid at its
                     -- proposed position: if not, the game is over.
                     if isValidPosition nextBoard newDroppingShape then
-                        continueWithUpdatedDroppingShape True newDroppingShape nextModel
+                        continueWithUpdatedDroppingShape
+                            { newShapeRequested = True, shapedDropped = False, droppingShape = newDroppingShape }
+                            nextModel
 
                     else
                         GameOver { game = Game { model | board = nextBoard } }
@@ -310,11 +370,12 @@ handleDroppingShapeLanded (Game ({ shapeBuffer, state, board, nextShape } as mod
             NoChange
 
 
-continueWithUpdatedDroppingShape : Bool -> DroppingShape -> Model -> MoveResult
-continueWithUpdatedDroppingShape newShapeRequested droppingShape model =
+continueWithUpdatedDroppingShape : { newShapeRequested : Bool, shapedDropped : Bool, droppingShape : DroppingShape } -> Model -> MoveResult
+continueWithUpdatedDroppingShape { newShapeRequested, shapedDropped, droppingShape } model =
     Continue
         { game = Game { model | state = RegularGameState { droppingShape = droppingShape } }
         , newShapeRequested = newShapeRequested
+        , shapeDropped = shapedDropped
         }
 
 

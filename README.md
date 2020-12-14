@@ -31,7 +31,7 @@ Current state: **WIP.**
 - [x] Complete UI for each of the different states (instructions, playing, paused, game ended, etc)
 - [x] Constantly rotating when at the lowest possible position restarts the timer drop so user can stop the game from
       progressing at all by just holding down the rotate key.
-- [ ] Improve playability wrt long holds of buttons
+- [x] Improve playability wrt long holds of buttons
 - [ ] Add key binding for dropping current piece immediately (space bar?)
 - [ ] Add ability to pause game
 - [ ] Show upcoming pieces
@@ -39,6 +39,8 @@ Current state: **WIP.**
 - [ ] High scores (persisted to local storage)
 - [ ] Settings/preferences, e.g. keyboard bindings (persisted to local storage)
 - [ ] Add link to get to source code, etc.
+- [ ] Consolidate `id` fields used in messages/subscriptions/etc - put into a module and expose as opaque type?
+  (e.g. `PlayingModel.timerDropMessageId`, `HighlightAnimation.Id`, etc.)
 - [ ] Make UI responsive.
   - [ ] Buttons to use instead of keyboard for phones/tablets?
 - [ ] Improve Game Over animation - drop the "Game Over" message down from top of board (use SVG for this?)

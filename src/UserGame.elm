@@ -10,17 +10,17 @@ the board and other related items such as a Pause button, etc.
 
 import BlockColour exposing (BlockColour)
 import BoardView
-import Browser.Events
 import Coord exposing (Coord)
 import Element exposing (Element)
 import Game exposing (Game)
 import GameBoard
 import HighlightAnimation
-import Keyboard
+import Process
 import Random
 import RandomShapeGenerator
 import Shape exposing (Shape)
-import Time
+import Task
+import UserGameControl
 
 
 
@@ -37,6 +37,12 @@ type Model
   - `game`: The current game, passed into the `Game` module whenever events occur such as the user moving a block, etc.
   - `timerDropDelay`: How long, in ms, before the currently dropping shape should be automatically dropped down a row.
     As the game continues this decrements to make the game speed up.
+  - `timerDropMessageId`: The ID associated with the `TimerDropDelayElapsed` messages which should be responded to. Every
+    message of that type has an ID associated with it, which is the value that this model field had when the system decided
+    to wait `timerDropDelay` ms before doing the next drop. If, by the time the message arrives (i.e. after the delay),
+    the ID of the message still matches the value in the model, then the message should be acted on. However if, between
+    the system starting to wait (`Process.sleep`) and the message arriving, the user manually drops a shape down a row,
+    then we set a new value for this field in the model: when the message then arrives, we know to ignore it.
   - `normalBlocks`: The normal blocks which are to be rendered with no special effects (animation). These are calculated
     by calling `Game.blocks` (which calculates them based on the supplied `game`), so arguably it's a redundant duplication
     to store them in the model here, but this is done for performance reasons. `Game.blocks` has to do a bit of
@@ -48,14 +54,18 @@ type Model
     game, but for performance reasons is stored in the model.
   - `nextAnimationId`: The unique ID to use for the next animation. See the `Id` type in the `HighlightAnimation` module
     for more info on this.
+  - `gameControl`: The model of the `UserGameControl` module, managing the user's controlling of the game, e.g. what
+    keyboard keys are currently held down, etc.
 
 -}
 type alias PlayingModel =
     { game : Game
     , timerDropDelay : Int
+    , timerDropMessageId : Int
     , normalBlocks : List ( Coord, BlockColour )
     , highlightAnimation : Maybe HighlightAnimation.Model
     , nextAnimationId : HighlightAnimation.Id
+    , gameControl : UserGameControl.Model
     }
 
 
@@ -73,22 +83,9 @@ init =
 type Msg
     = Initialised Game.InitialisationInfo -- Game has been initialised
     | RandomShapeGenerated Shape -- Random shape was asked for (to add to the buffer) and is now ready
-    | MoveShapeRequested Game.MoveDirection -- User clicked arrow to move currently dropping shape in given direction
-    | RotateShapeRequested Shape.RotationDirection -- User pressed key to rotate currently dropping shape in given direction
-    | TimerDropDelayElapsed -- Currently dropping shape should drop one row
+    | GotGameControlMsg UserGameControl.Msg -- User requested some actions, e.g. clicked arrow to move or rotate currently dropping shape.
+    | TimerDropDelayElapsed Int -- Currently dropping shape should drop one row
     | HighlightAnimationMsg HighlightAnimation.Msg -- A message from the `HighlightAnimation` module as occurred: this is passed to that module to handle.
-
-
-{-| Mapping of keyboard buttons to corresponding messages.
--}
-keyMessages : Keyboard.KeyMessages Msg
-keyMessages =
-    { moveLeft = MoveShapeRequested Game.Left
-    , moveRight = MoveShapeRequested Game.Right
-    , dropOneRow = MoveShapeRequested Game.Down
-    , rotateClockwise = RotateShapeRequested Shape.Clockwise
-    , rotateAnticlockwise = RotateShapeRequested Shape.Anticlockwise
-    }
 
 
 {-| Data returned from the `update` function detailing anything the calling module needs to know, e.g. whether the game
@@ -103,7 +100,7 @@ update : Msg -> Model -> UpdateResult
 update msg model =
     case ( model, msg ) of
         ( Initialising, Initialised initialisationInfo ) ->
-            Continue (startNewGame initialisationInfo) Cmd.none
+            startNewGame initialisationInfo |> continueFromModelCmdTuple
 
         ( _, Initialised _ ) ->
             Continue model Cmd.none
@@ -114,22 +111,20 @@ update msg model =
         ( _, RandomShapeGenerated _ ) ->
             Continue model Cmd.none
 
-        ( Playing playingModel, MoveShapeRequested direction ) ->
-            Game.moveShape direction playingModel.game |> handleMoveResult playingModel
+        ( Playing playingModel, GotGameControlMsg gameControlMsg ) ->
+            handleGameControlMsg playingModel gameControlMsg
 
-        ( _, MoveShapeRequested _ ) ->
+        ( _, GotGameControlMsg _ ) ->
             Continue model Cmd.none
 
-        ( Playing playingModel, RotateShapeRequested direction ) ->
-            Game.rotateShape direction playingModel.game |> handleMoveResult playingModel
+        ( Playing playingModel, TimerDropDelayElapsed id ) ->
+            if playingModel.timerDropMessageId == id then
+                Game.timerDrop playingModel.game |> handleMoveResult playingModel True
 
-        ( _, RotateShapeRequested _ ) ->
-            Continue model Cmd.none
+            else
+                Continue model Cmd.none
 
-        ( Playing playingModel, TimerDropDelayElapsed ) ->
-            Game.timerDrop playingModel.game |> handleMoveResult playingModel
-
-        ( _, TimerDropDelayElapsed ) ->
+        ( _, TimerDropDelayElapsed _ ) ->
             Continue model Cmd.none
 
         ( _, HighlightAnimationMsg highlightAnimationMsg ) ->
@@ -138,29 +133,99 @@ update msg model =
 
 {-| Starts a new game after it's been initialised.
 -}
-startNewGame : Game.InitialisationInfo -> Model
+startNewGame : Game.InitialisationInfo -> ( Model, Cmd Msg )
 startNewGame initialisationInfo =
     let
         newGame =
             Game.new initialisationInfo
+
+        playingModel =
+            { game = newGame
+            , timerDropDelay = 1000 -- TODO: hard-coded 1000 here - configurable? right value?
+            , timerDropMessageId = 0
+            , normalBlocks = (Game.blocks newGame).normal
+            , highlightAnimation = Nothing -- We know initially there is nothing highlighted.
+            , nextAnimationId = HighlightAnimation.initialId
+            , gameControl = UserGameControl.init
+            }
     in
-    Playing
-        { game = newGame
-        , timerDropDelay = 1000 -- TODO: hard-coded 1000 here - configurable? right value?
-        , normalBlocks = (Game.blocks newGame).normal
-        , highlightAnimation = Nothing -- We know initially there is nothing highlighted.
-        , nextAnimationId = HighlightAnimation.initialId
-        }
+    ( Playing playingModel, timerDropDelayCmd playingModel )
 
 
-{-| Handles the result of a movement in the game, namely updates the model with the new game and, if required, initiates
-the asynchronous generation of a new random shape (which is then added to the game's model later).
+{-| Handles a message from the `UserGameControl` module. Asks that module to handle that message, and receives an updated
+model in return (which is then stored in this module's model), along with zero or more user actions to be executed.
+Then asks the `Game` module to execute those actions (e.g. move the shape down and left, if those two keys are currently
+being pressed down). Returns an `UpdateResult` that informs the parent module what it has to do.
+
+If one of the user actions was to drop the shape down a row then this also increments the model's `timerDropMessageId`
+and ensures that a new `Process.sleep` task is returned in the `UpdateResult` so that the next timer drop occurs x
+milliseconds from now (where x = model.timerDropDelay).
+
 -}
-handleMoveResult : PlayingModel -> Game.MoveResult -> UpdateResult
-handleMoveResult currentPlayingModel moveResult =
+handleGameControlMsg : PlayingModel -> UserGameControl.Msg -> UpdateResult
+handleGameControlMsg playingModel gameControlMsg =
+    let
+        ( nextGameControlModel, actionsToExecute ) =
+            UserGameControl.update playingModel.gameControl gameControlMsg
+
+        moveResult =
+            Game.executeUserActions actionsToExecute playingModel.game
+
+        -- If a shape was dropped then reset the timer drop delay
+        startNewTimerDropDelay =
+            case moveResult of
+                Game.Continue { shapeDropped } ->
+                    shapeDropped
+
+                _ ->
+                    False
+
+        -- If we're starting a new timer drop delay the increment the `timerDropMessageId` so that when the current
+        -- `Process.sleep` eventually returns we'll know to ignore it.
+        newTimerDropSubscriptionId =
+            if startNewTimerDropDelay then
+                playingModel.timerDropMessageId + 1
+
+            else
+                playingModel.timerDropMessageId
+    in
+    moveResult
+        |> handleMoveResult
+            { playingModel
+                | gameControl = nextGameControlModel
+                , timerDropMessageId = newTimerDropSubscriptionId
+            }
+            startNewTimerDropDelay
+
+
+{-| Gets the command which will sleep for `timerDropDelay` ms then cause the `TimerDropDelayElapsed` message to be invoked.
+-}
+timerDropDelayCmd : PlayingModel -> Cmd Msg
+timerDropDelayCmd { timerDropDelay, timerDropMessageId } =
+    Process.sleep (toFloat timerDropDelay)
+        |> Task.perform (always <| TimerDropDelayElapsed timerDropMessageId)
+
+
+{-| Handles the result of a movement in the game, namely updates the model with the new game. If required, initiates
+the asynchronous generation of a new random shape (which is then added to the game's model later). Will also start a new
+timer drop delay (by including a `Process.sleep` task in the returned `UpdateResult`) if required.
+-}
+handleMoveResult : PlayingModel -> Bool -> Game.MoveResult -> UpdateResult
+handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
+    let
+        -- Gets all the commands that should be returned in the `UpdateResult`, by combining the ones supplied to this
+        -- function with, if required, `timerDropDelayCmd`.
+        allCmds : List (Cmd Msg) -> Cmd Msg
+        allCmds cmds =
+            if startNewTimerDropDelay then
+                Cmd.batch <| timerDropDelayCmd currentPlayingModel :: cmds
+
+            else
+                Cmd.batch cmds
+    in
     case moveResult of
         Game.NoChange ->
-            Continue (Playing currentPlayingModel) Cmd.none
+            Continue (Playing currentPlayingModel) (allCmds [])
 
         Game.Continue { game, newShapeRequested } ->
             let
@@ -181,7 +246,7 @@ handleMoveResult currentPlayingModel moveResult =
                         (Playing
                             { currentPlayingModel | game = game, normalBlocks = nextBlocks.normal, highlightAnimation = Nothing }
                         )
-                        generateRandomShapeCmd
+                        (allCmds [ generateRandomShapeCmd ])
 
                 _ ->
                     -- There are some blocks we need to animate, but this animation might already be in progress (e.g.
@@ -189,7 +254,9 @@ handleMoveResult currentPlayingModel moveResult =
                     -- current animation).
                     case currentPlayingModel.highlightAnimation of
                         Nothing ->
-                            ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding, generateRandomShapeCmd )
+                            ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding
+                            , allCmds [ generateRandomShapeCmd ]
+                            )
                                 |> continueFromModelCmdTuple
 
                         Just currentAnimation ->
@@ -200,13 +267,16 @@ handleMoveResult currentPlayingModel moveResult =
                                         { currentPlayingModel
                                             | game = game
                                             , normalBlocks = nextBlocks.normal
-                                            , highlightAnimation = Just <| HighlightAnimation.withBlocks nextBlocks.highlighted currentAnimation
+                                            , highlightAnimation =
+                                                Just <| HighlightAnimation.withBlocks nextBlocks.highlighted currentAnimation
                                         }
                                     )
-                                    generateRandomShapeCmd
+                                    (allCmds [ generateRandomShapeCmd ])
 
                             else
-                                ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding, generateRandomShapeCmd )
+                                ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding
+                                , allCmds [ generateRandomShapeCmd ]
+                                )
                                     |> continueFromModelCmdTuple
 
         Game.RowBeingRemoved { game } ->
@@ -214,7 +284,9 @@ handleMoveResult currentPlayingModel moveResult =
                 nextBlocks =
                     Game.blocks game
             in
-            ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.RowRemoval, generateRandomShape )
+            ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.RowRemoval
+            , allCmds [ generateRandomShape ]
+            )
                 |> continueFromModelCmdTuple
 
         Game.GameOver { game } ->
@@ -375,7 +447,7 @@ subscriptions model =
         Initialising ->
             Sub.none
 
-        Playing { game, timerDropDelay, highlightAnimation } ->
+        Playing { game, gameControl, timerDropDelay, timerDropMessageId, highlightAnimation } ->
             let
                 animationSubscription =
                     highlightAnimation
@@ -384,7 +456,5 @@ subscriptions model =
                         |> Maybe.withDefault []
             in
             Sub.batch <|
-                [ Browser.Events.onKeyDown <| Keyboard.keyEventDecoder keyMessages
-                , Time.every (toFloat timerDropDelay) <| always TimerDropDelayElapsed
-                ]
+                [ UserGameControl.subscriptions gameControl |> Sub.map GotGameControlMsg ]
                     ++ animationSubscription
