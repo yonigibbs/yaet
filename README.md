@@ -31,7 +31,7 @@ Current state: **WIP.**
 - [x] Complete UI for each of the different states (instructions, playing, paused, game ended, etc)
 - [x] Constantly rotating when at the lowest possible position restarts the timer drop so user can stop the game from
       progressing at all by just holding down the rotate key.
-- [ ] Improve playability wrt long holds of buttons
+- [x] Improve playability wrt long holds of buttons
 - [ ] Add key binding for dropping current piece immediately (space bar?)
 - [ ] Add ability to pause game
 - [ ] Show upcoming pieces
