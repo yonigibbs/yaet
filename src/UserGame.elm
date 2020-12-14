@@ -20,7 +20,6 @@ import Random
 import RandomShapeGenerator
 import Shape exposing (Shape)
 import Task
-import Time
 import UserGameControl
 
 
@@ -38,6 +37,12 @@ type Model
   - `game`: The current game, passed into the `Game` module whenever events occur such as the user moving a block, etc.
   - `timerDropDelay`: How long, in ms, before the currently dropping shape should be automatically dropped down a row.
     As the game continues this decrements to make the game speed up.
+  - `timerDropMessageId`: The ID associated with the `TimerDropDelayElapsed` messages which should be responded to. Every
+    message of that type has an ID associated with it, which is the value that this model field had when the system decided
+    to wait `timerDropDelay` ms before doing the next drop. If, by the time the message arrives (i.e. after the delay),
+    the ID of the message still matches the value in the model, then the message should be acted on. However if, between
+    the system starting to wait (`Process.sleep`) and the message arriving, the user manually drops a shape down a row,
+    then we set a new value for this field in the model: when the message then arrives, we know to ignore it.
   - `normalBlocks`: The normal blocks which are to be rendered with no special effects (animation). These are calculated
     by calling `Game.blocks` (which calculates them based on the supplied `game`), so arguably it's a redundant duplication
     to store them in the model here, but this is done for performance reasons. `Game.blocks` has to do a bit of
@@ -49,6 +54,8 @@ type Model
     game, but for performance reasons is stored in the model.
   - `nextAnimationId`: The unique ID to use for the next animation. See the `Id` type in the `HighlightAnimation` module
     for more info on this.
+  - `gameControl`: The model of the `UserGameControl` module, managing the user's controlling of the game, e.g. what
+    keyboard keys are currently held down, etc.
 
 -}
 type alias PlayingModel =
@@ -124,40 +131,6 @@ update msg model =
             handleAnimationMsg model highlightAnimationMsg
 
 
-handleGameControlMsg : PlayingModel -> UserGameControl.Msg -> UpdateResult
-handleGameControlMsg playingModel gameControlMsg =
-    let
-        ( nextGameControlModel, actionsToExecute ) =
-            UserGameControl.update playingModel.gameControl gameControlMsg
-
-        moveResult =
-            Game.executeUserActions playingModel.game actionsToExecute
-
-        startNewTimerDropDelay =
-            case moveResult of
-                Game.Continue { shapeDropped } ->
-                    -- If a shape was dropped then reset the timer drop delay
-                    shapeDropped
-
-                _ ->
-                    False
-
-        newTimerDropSubscriptionId =
-            if startNewTimerDropDelay then
-                playingModel.timerDropMessageId + 1
-
-            else
-                playingModel.timerDropMessageId
-    in
-    moveResult
-        |> handleMoveResult
-            { playingModel
-                | gameControl = nextGameControlModel
-                , timerDropMessageId = newTimerDropSubscriptionId
-            }
-            startNewTimerDropDelay
-
-
 {-| Starts a new game after it's been initialised.
 -}
 startNewGame : Game.InitialisationInfo -> ( Model, Cmd Msg )
@@ -179,18 +152,69 @@ startNewGame initialisationInfo =
     ( Playing playingModel, timerDropDelayCmd playingModel )
 
 
+{-| Handles a message from the `UserGameControl` module. Asks that module to handle that message, and receives an updated
+model in return (which is then stored in this module's model), along with zero or more user actions to be executed.
+Then asks the `Game` module to execute those actions (e.g. move the shape down and left, if those two keys are currently
+being pressed down). Returns an `UpdateResult` that informs the parent module what it has to do.
+
+If one of the user actions was to drop the shape down a row then this also increments the model's `timerDropMessageId`
+and ensures that a new `Process.sleep` task is returned in the `UpdateResult` so that the next timer drop occurs x
+milliseconds from now (where x = model.timerDropDelay).
+
+-}
+handleGameControlMsg : PlayingModel -> UserGameControl.Msg -> UpdateResult
+handleGameControlMsg playingModel gameControlMsg =
+    let
+        ( nextGameControlModel, actionsToExecute ) =
+            UserGameControl.update playingModel.gameControl gameControlMsg
+
+        moveResult =
+            Game.executeUserActions actionsToExecute playingModel.game
+
+        -- If a shape was dropped then reset the timer drop delay
+        startNewTimerDropDelay =
+            case moveResult of
+                Game.Continue { shapeDropped } ->
+                    shapeDropped
+
+                _ ->
+                    False
+
+        -- If we're starting a new timer drop delay the increment the `timerDropMessageId` so that when the current
+        -- `Process.sleep` eventually returns we'll know to ignore it.
+        newTimerDropSubscriptionId =
+            if startNewTimerDropDelay then
+                playingModel.timerDropMessageId + 1
+
+            else
+                playingModel.timerDropMessageId
+    in
+    moveResult
+        |> handleMoveResult
+            { playingModel
+                | gameControl = nextGameControlModel
+                , timerDropMessageId = newTimerDropSubscriptionId
+            }
+            startNewTimerDropDelay
+
+
+{-| Gets the command which will sleep for `timerDropDelay` ms then cause the `TimerDropDelayElapsed` message to be invoked.
+-}
 timerDropDelayCmd : PlayingModel -> Cmd Msg
 timerDropDelayCmd { timerDropDelay, timerDropMessageId } =
     Process.sleep (toFloat timerDropDelay)
         |> Task.perform (always <| TimerDropDelayElapsed timerDropMessageId)
 
 
-{-| Handles the result of a movement in the game, namely updates the model with the new game and, if required, initiates
-the asynchronous generation of a new random shape (which is then added to the game's model later).
+{-| Handles the result of a movement in the game, namely updates the model with the new game. If required, initiates
+the asynchronous generation of a new random shape (which is then added to the game's model later). Will also start a new
+timer drop delay (by including a `Process.sleep` task in the returned `UpdateResult`) if required.
 -}
 handleMoveResult : PlayingModel -> Bool -> Game.MoveResult -> UpdateResult
 handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
     let
+        -- Gets all the commands that should be returned in the `UpdateResult`, by combining the ones supplied to this
+        -- function with, if required, `timerDropDelayCmd`.
         allCmds : List (Cmd Msg) -> Cmd Msg
         allCmds cmds =
             if startNewTimerDropDelay then
