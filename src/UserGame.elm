@@ -119,7 +119,13 @@ update msg model =
 
         ( Playing playingModel, TimerDropDelayElapsed id ) ->
             if playingModel.timerDropMessageId == id then
-                Game.timerDrop playingModel.game |> handleMoveResult playingModel True
+                -- Reset highlightAnimation to Nothing here because no animation should continue across a timer drop delay.
+                -- This also prevents a weird edge case: near the end of a game if there are two empty rows at the top
+                -- and a new shape appears which is two shapes tall, the model is updated and one animation (whose type
+                -- is ShapeLanding) is replaced by another of exactly the same type (since we replace one "landing" shape
+                -- with another "landing" shape). If we don't reset it to Nothing here, the code eventually gets confused
+                -- and thinks it's the same animation continuing, but actually it's two distinct ones.
+                Game.timerDrop playingModel.game |> handleMoveResult { playingModel | highlightAnimation = Nothing } True
 
             else
                 Continue model Cmd.none
@@ -285,7 +291,8 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
                     Game.blocks game
             in
             ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.RowRemoval
-            , allCmds [ generateRandomShape ]
+              -- Don't call allCmds here - if a row is being removed we _don't_ want a timer drop delay to start yet.
+            , generateRandomShape
             )
                 |> continueFromModelCmdTuple
 
@@ -371,7 +378,7 @@ handleAnimationMsg model msg =
                                                 , highlightAnimation = Nothing
                                             }
                                         )
-                                        Cmd.none
+                                        (timerDropDelayCmd playingModel)
 
                 Nothing ->
                     Continue model Cmd.none

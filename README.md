@@ -33,7 +33,7 @@ Current state: **WIP.**
       progressing at all by just holding down the rotate key.
 - [x] Improve playability wrt long holds of buttons
 - [ ] Add more unit tests for the above
-- [ ] Fix issue where if two empty rows available and user pressing the down arrow, the new shape appears then
+- [x] Fix issue where if two empty rows available and user pressing the down arrow, the new shape appears then
       disappears briefly just before Game Over appears. 
 - [ ] Add key binding for dropping current piece immediately (space bar?)
 - [ ] Add ability to pause game
