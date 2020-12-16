@@ -242,12 +242,12 @@ buildKeyboardConfig :
 buildKeyboardConfig { moveLeft, moveRight, dropOneRow, dropImmediately, rotateClockwise, rotateAnticlockwise } =
     KeyboardConfig <|
         Dict.fromList
-            [ ( moveLeft, Game.Move Game.Left )
-            , ( moveRight, Game.Move Game.Right )
-            , ( dropOneRow, Game.Move Game.Down )
-            , ( dropImmediately, Game.DropToBottom )
-            , ( rotateClockwise, Game.Rotate Shape.Clockwise )
-            , ( rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
+            [ ( String.toLower moveLeft, Game.Move Game.Left )
+            , ( String.toLower moveRight, Game.Move Game.Right )
+            , ( String.toLower dropOneRow, Game.Move Game.Down )
+            , ( String.toLower dropImmediately, Game.DropToBottom )
+            , ( String.toLower rotateClockwise, Game.Rotate Shape.Clockwise )
+            , ( String.toLower rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
             ]
 
 
@@ -259,7 +259,7 @@ keyboardDecoder (KeyboardConfig config) =
     JD.field "key" JD.string
         |> JD.andThen
             (\key ->
-                case Dict.get key config of
+                case Dict.get (String.toLower key) config of
                     Just action ->
                         JD.succeed action
 
