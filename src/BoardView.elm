@@ -194,7 +194,11 @@ gridLine ({ cellSize } as config) direction index =
         , SvgA.x2 x2
         , SvgA.y2 y2
         , SvgA.stroke <| SvgT.Paint Color.lightGray
-        , SvgA.strokeWidth <| SvgT.px 0.5
+        , SvgA.strokeWidth <| SvgT.px 0.15
+
+        -- Render the lines with crisp edges as they're very thin - otherwise they can end up with alternating lines
+        -- seeming like they have slightly different thicknesses
+        , SvgA.shapeRendering SvgT.RenderCrispEdges
         ]
         []
 
