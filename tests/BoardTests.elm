@@ -5,10 +5,10 @@ way. Instead, we start off with an empty board, then build it up by appending ce
 -}
 
 import AsciiGrid
-import BlockColour exposing (BlockColour)
 import Coord exposing (Coord)
 import Expect
 import GameBoard exposing (GameBoard)
+import Shape
 import Test exposing (Test, describe, test)
 
 
@@ -23,18 +23,18 @@ y----pp-yg-
 b---g-ro-b-
 """
                 [ -- First row
-                  ( ( 0, 0 ), BlockColour.Blue )
-                , ( ( 4, 0 ), BlockColour.Green )
-                , ( ( 6, 0 ), BlockColour.Red )
-                , ( ( 7, 0 ), BlockColour.Orange )
-                , ( ( 9, 0 ), BlockColour.Blue )
+                  ( ( 0, 0 ), Shape.Blue )
+                , ( ( 4, 0 ), Shape.Green )
+                , ( ( 6, 0 ), Shape.Red )
+                , ( ( 7, 0 ), Shape.Orange )
+                , ( ( 9, 0 ), Shape.Blue )
 
                 -- Second row
-                , ( ( 0, 1 ), BlockColour.Yellow )
-                , ( ( 5, 1 ), BlockColour.Purple )
-                , ( ( 6, 1 ), BlockColour.Purple )
-                , ( ( 8, 1 ), BlockColour.Yellow )
-                , ( ( 9, 1 ), BlockColour.Green )
+                , ( ( 0, 1 ), Shape.Yellow )
+                , ( ( 5, 1 ), Shape.Purple )
+                , ( ( 6, 1 ), Shape.Purple )
+                , ( ( 8, 1 ), Shape.Yellow )
+                , ( ( 9, 1 ), Shape.Green )
                 ]
             ]
         , describe "append" <|
@@ -84,7 +84,7 @@ r-oy-bbb-p-
         ]
 
 
-occupiedCellsTest : String -> String -> List ( Coord, BlockColour ) -> Test
+occupiedCellsTest : String -> String -> List ( Coord, Shape.BlockColour ) -> Test
 occupiedCellsTest testDescr asciiBoard expectedOccupiedCells =
     test testDescr <|
         \_ ->

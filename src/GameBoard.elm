@@ -17,8 +17,8 @@ the board.
 -}
 
 import Array exposing (Array)
-import BlockColour exposing (BlockColour)
 import Coord exposing (Coord)
+import Shape
 
 
 {-| Represents the board. This is a 10x20 grid with cells, which can either be empty or have a block in them.
@@ -33,7 +33,7 @@ type GameBoard
 -}
 type Cell
     = Empty
-    | Occupied BlockColour
+    | Occupied Shape.BlockColour
 
 
 {-| A row in the grid. An alias for an array of `Cell`s.
@@ -60,10 +60,10 @@ Returns a list of tuples, where the first value in the tuple is the block's coor
 colour.
 
 -}
-occupiedCells : GameBoard -> List ( Coord, BlockColour )
+occupiedCells : GameBoard -> List ( Coord, Shape.BlockColour )
 occupiedCells (GameBoard board) =
     let
-        rowPopulatedCells : Int -> Row -> List ( Coord, BlockColour )
+        rowPopulatedCells : Int -> Row -> List ( Coord, Shape.BlockColour )
         rowPopulatedCells y row =
             row
                 |> Array.indexedMap
@@ -153,7 +153,7 @@ removeRows (GameBoard rows) indexes =
 {-| Appends the supplied coordinates as occupied cells onto the supplied board. Note that this doesn't automatically
 removed any newly completed lines.
 -}
-append : GameBoard -> BlockColour -> List Coord -> GameBoard
+append : GameBoard -> Shape.BlockColour -> List Coord -> GameBoard
 append (GameBoard board) colour coords =
     let
         appendCell : Coord -> Array Row -> Array Row

@@ -1,4 +1,16 @@
-module Shape exposing (RotationDirection(..), Shape, ShapeBuilder, ShapeData, builders, data, rotate)
+module Shape exposing
+    ( Bag
+    , BlockColour(..)
+    , RotationDirection(..)
+    , Shape
+    , ShapeData
+    , allColours
+    , allShapes
+    , createShapeBag
+    , data
+    , next
+    , rotate
+    )
 
 {-| A shape represents a set of four contiguous blocks currently falling from the top of the board to the bottom. Once
 it lands, the blocks that make up that shape become part of the board itself, and are no longer represented by a shape.
@@ -58,8 +70,28 @@ that the top of the shape's grid should be at the top of board when that shape i
 
 -}
 
-import BlockColour exposing (BlockColour)
 import Coord exposing (Coord)
+import Random
+import Random.List
+
+
+{-| The colour of a block which forms part of a shape and eventually part of the board, when it lands.
+-}
+type BlockColour
+    = Cyan
+    | Blue
+    | Orange
+    | Yellow
+    | Green
+    | Purple
+    | Red
+
+
+{-| All colours used in the shapes.
+-}
+allColours : List BlockColour
+allColours =
+    [ Cyan, Blue, Orange, Yellow, Green, Purple, Red ]
 
 
 {-| A shape currently in the process of dropping down the board.
@@ -88,49 +120,39 @@ data (Shape shapeData) =
     shapeData
 
 
-{-| A function which is used to generate a valid shape.
+{-| All the shapes used in the game. Returned as a tuple to represent a "non-empty list" rather than just a normal list,
+as this is required in a few places.
 -}
-type alias ShapeBuilder =
-    BlockColour -> Shape
-
-
-{-| A list of functions, each of which creates a different shape, of some given colour. This list contains the functions
-for generating all possible shapes. As this has to be known to the compiler to be non-empty, a tuple is returned with a
-default shape builder, followed by the rest of the shape builders.
--}
-builders : ( ShapeBuilder, List ShapeBuilder )
-builders =
-    let
-        convertToBuilder =
-            \{ gridSize, blocks } colour -> Shape { gridSize = gridSize, blocks = blocks, colour = colour }
-    in
-    ( -- Straight line (initially horizontal)
-      convertToBuilder { gridSize = 4, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 2, 2 ), ( 3, 2 ) ] }
-    , List.map convertToBuilder
+allShapes : ( Shape, List Shape )
+allShapes =
+    -- Straight line (initially horizontal)
+    ( Shape { gridSize = 4, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 2, 2 ), ( 3, 2 ) ], colour = Cyan }
+    , List.map
+        Shape
         [ -- L-shape on its back:
           --     x
           -- x x x
-          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 2, 2 ) ] }
+          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 2, 1 ), ( 2, 2 ) ], colour = Orange }
         , -- Mirror image of the above:
           -- x
           -- x x x
-          { gridSize = 3, blocks = [ ( 0, 2 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ) ] }
+          { gridSize = 3, blocks = [ ( 0, 2 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ) ], colour = Blue }
         , -- Plus-sign with a bit on the bottom missing:
           --   x
           -- x x x
-          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 1 ) ] }
+          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 1 ) ], colour = Purple }
         , -- Almost a "z-shape":
           -- x x
           --   x x
-          { gridSize = 3, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 1, 1 ), ( 2, 1 ) ] }
+          { gridSize = 3, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 1, 1 ), ( 2, 1 ) ], colour = Red }
         , -- Mirror image of the above:
           --   x x
           -- x x
-          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 2 ) ] }
+          { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 2 ) ], colour = Green }
         , -- Square:
           -- x x
           -- x x
-          { gridSize = 2, blocks = [ ( 0, 0 ), ( 0, 1 ), ( 1, 0 ), ( 1, 1 ) ] }
+          { gridSize = 2, blocks = [ ( 0, 0 ), ( 0, 1 ), ( 1, 0 ), ( 1, 1 ) ], colour = Yellow }
         ]
     )
 
@@ -205,3 +227,44 @@ rotate direction (Shape shapeData) =
                     \( x, y ) -> ( shapeData.gridSize - 1 - y, x )
     in
     Shape { shapeData | blocks = List.map calcCoords shapeData.blocks }
+
+
+
+-- SHAPE BAG
+
+
+{-| Represents a "bag of shape". This starts off as full of all 7 shapes in the game (in a random order), and can have
+one shape at a time removed from it till eventually it's empty, at which point the 7 shapes are used to re-fill it, in a
+new random order.
+-}
+type Bag
+    = Bag { seed : Random.Seed, shapes : List Shape }
+
+
+{-| Creates a newly filly shape bag, using the passed in seed to provide pseudo-randomness.
+-}
+createShapeBag : Random.Seed -> Bag
+createShapeBag seed =
+    let
+        ( firstShape, restShape ) =
+            allShapes
+    in
+    Bag { seed = seed, shapes = firstShape :: restShape }
+
+
+{-| Retrieves the next shape from the bag (refilling if it required). Returns that shape, along with a new bag to use in
+subsequent calls.
+-}
+next : Bag -> ( Shape, Bag )
+next (Bag { seed, shapes }) =
+    let
+        ( ( maybeShape, remainingShapes ), newSeed ) =
+            Random.step (Random.List.choose shapes) seed
+    in
+    case maybeShape of
+        Just shape ->
+            ( shape, Bag { seed = newSeed, shapes = remainingShapes } )
+
+        Nothing ->
+            -- Bag is empty - just create a new full bag and use that instead.
+            createShapeBag seed |> next

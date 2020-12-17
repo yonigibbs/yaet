@@ -8,7 +8,6 @@ in a unit test). This module provides that control, and also the view for render
 the board and other related items such as a Pause button, etc.
 -}
 
-import BlockColour exposing (BlockColour)
 import BoardView
 import Coord exposing (Coord)
 import Element exposing (Element)
@@ -17,9 +16,9 @@ import GameBoard
 import HighlightAnimation
 import Process
 import Random
-import RandomShapeGenerator
 import Shape exposing (Shape)
 import Task
+import Time
 import UserGameControl
 
 
@@ -59,21 +58,21 @@ type Model
 
 -}
 type alias PlayingModel =
-    { game : Game
+    { game : Game Shape.Bag
     , timerDropDelay : Int
     , timerDropMessageId : Int
-    , normalBlocks : List ( Coord, BlockColour )
+    , normalBlocks : List ( Coord, Shape.BlockColour )
     , highlightAnimation : Maybe HighlightAnimation.Model
     , nextAnimationId : HighlightAnimation.Id
     , gameControl : UserGameControl.Model
     }
 
 
-{-| Initialises the game - this involves generating the random shapes required by the game to start.
+{-| Initialises the game - this involves getting the current time to act as a random seed for generating random shapes.
 -}
 init : ( Model, Cmd Msg )
 init =
-    ( Initialising, Random.generate Initialised initialGameDataGenerator )
+    ( Initialising, Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised) )
 
 
 
@@ -81,8 +80,7 @@ init =
 
 
 type Msg
-    = Initialised Game.InitialisationInfo -- Game has been initialised
-    | RandomShapeGenerated Shape -- Random shape was asked for (to add to the buffer) and is now ready
+    = Initialised Random.Seed -- The random seed is available and the game is now ready to start.
     | GotGameControlMsg UserGameControl.Msg -- User requested some actions, e.g. clicked arrow to move or rotate currently dropping shape.
     | TimerDropDelayElapsed Int -- Currently dropping shape should drop one row
     | HighlightAnimationMsg HighlightAnimation.Msg -- A message from the `HighlightAnimation` module as occurred: this is passed to that module to handle.
@@ -92,30 +90,24 @@ type Msg
 is now over or not.
 -}
 type UpdateResult
-    = Continue Model (Cmd Msg)
-    | GameOver Game
+    = Continue ( Model, Cmd Msg )
+    | GameOver (Game Shape.Bag)
 
 
 update : Msg -> Model -> UpdateResult
 update msg model =
     case ( model, msg ) of
-        ( Initialising, Initialised initialisationInfo ) ->
-            startNewGame initialisationInfo |> continueFromModelCmdTuple
+        ( Initialising, Initialised seed ) ->
+            Continue <| startNewGame seed
 
         ( _, Initialised _ ) ->
-            Continue model Cmd.none
-
-        ( Playing playingModel, RandomShapeGenerated shape ) ->
-            Continue (Playing { playingModel | game = Game.shapeGenerated playingModel.game shape }) Cmd.none
-
-        ( _, RandomShapeGenerated _ ) ->
-            Continue model Cmd.none
+            Continue ( model, Cmd.none )
 
         ( Playing playingModel, GotGameControlMsg gameControlMsg ) ->
             handleGameControlMsg playingModel gameControlMsg
 
         ( _, GotGameControlMsg _ ) ->
-            Continue model Cmd.none
+            Continue ( model, Cmd.none )
 
         ( Playing playingModel, TimerDropDelayElapsed id ) ->
             if playingModel.timerDropMessageId == id then
@@ -125,13 +117,14 @@ update msg model =
                 -- is ShapeLanding) is replaced by another of exactly the same type (since we replace one "landing" shape
                 -- with another "landing" shape). If we don't reset it to Nothing here, the code eventually gets confused
                 -- and thinks it's the same animation continuing, but actually it's two distinct ones.
-                Game.timerDrop playingModel.game |> handleMoveResult { playingModel | highlightAnimation = Nothing } True
+                Game.timerDrop Shape.next playingModel.game
+                    |> handleMoveResult { playingModel | highlightAnimation = Nothing } True
 
             else
-                Continue model Cmd.none
+                Continue ( model, Cmd.none )
 
         ( _, TimerDropDelayElapsed _ ) ->
-            Continue model Cmd.none
+            Continue ( model, Cmd.none )
 
         ( _, HighlightAnimationMsg highlightAnimationMsg ) ->
             handleAnimationMsg model highlightAnimationMsg
@@ -139,17 +132,17 @@ update msg model =
 
 {-| Starts a new game after it's been initialised.
 -}
-startNewGame : Game.InitialisationInfo -> ( Model, Cmd Msg )
-startNewGame initialisationInfo =
+startNewGame : Random.Seed -> ( Model, Cmd Msg )
+startNewGame seed =
     let
         newGame =
-            Game.new initialisationInfo
+            Shape.createShapeBag seed |> Game.new Shape.next
 
         playingModel =
             { game = newGame
             , timerDropDelay = 1000 -- TODO: hard-coded 1000 here - configurable? right value?
             , timerDropMessageId = 0
-            , normalBlocks = (Game.blocks newGame).normal
+            , normalBlocks = Game.blocks newGame |> .normal
             , highlightAnimation = Nothing -- We know initially there is nothing highlighted.
             , nextAnimationId = HighlightAnimation.initialId
             , gameControl = UserGameControl.init
@@ -184,6 +177,8 @@ handleGameControlMsg playingModel gameControlMsg =
                     shapeDropped
 
                 _ ->
+                    -- If there was no change, or if the game is no in `RowBeingRemoved` state (i.e. we're "flashing"
+                    -- the row(s) about to be removed) then we don't want/need a timer drop delay.
                     False
 
         -- If we're starting a new timer drop delay the increment the `timerDropMessageId` so that when the current
@@ -206,7 +201,7 @@ handleGameControlMsg playingModel gameControlMsg =
 
 {-| Gets the command which will sleep for `timerDropDelay` ms then cause the `TimerDropDelayElapsed` message to be invoked.
 -}
-timerDropDelayCmd : PlayingModel -> Cmd Msg
+timerDropDelayCmd : { a | timerDropDelay : Int, timerDropMessageId : Int } -> Cmd Msg
 timerDropDelayCmd { timerDropDelay, timerDropMessageId } =
     Process.sleep (toFloat timerDropDelay)
         |> Task.perform (always <| TimerDropDelayElapsed timerDropMessageId)
@@ -216,99 +211,88 @@ timerDropDelayCmd { timerDropDelay, timerDropMessageId } =
 the asynchronous generation of a new random shape (which is then added to the game's model later). Will also start a new
 timer drop delay (by including a `Process.sleep` task in the returned `UpdateResult`) if required.
 -}
-handleMoveResult : PlayingModel -> Bool -> Game.MoveResult -> UpdateResult
+handleMoveResult : PlayingModel -> Bool -> Game.MoveResult Shape.Bag -> UpdateResult
 handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
     let
-        -- Gets all the commands that should be returned in the `UpdateResult`, by combining the ones supplied to this
-        -- function with, if required, `timerDropDelayCmd`.
-        allCmds : List (Cmd Msg) -> Cmd Msg
-        allCmds cmds =
+        -- Gets the command that should be returned in the `UpdateResult`, namely `timerDropDelayCmd` (if required)
+        updateResultCmd =
             if startNewTimerDropDelay then
-                Cmd.batch <| timerDropDelayCmd currentPlayingModel :: cmds
+                timerDropDelayCmd currentPlayingModel
 
             else
-                Cmd.batch cmds
+                Cmd.none
     in
     case moveResult of
         Game.NoChange ->
-            Continue (Playing currentPlayingModel) (allCmds [])
+            Continue ( Playing currentPlayingModel, updateResultCmd )
 
-        Game.Continue { game, newShapeRequested } ->
+        Game.Continue { game } ->
             let
+                playingModel =
+                    { currentPlayingModel | game = game }
+
                 nextBlocks =
                     Game.blocks game
-
-                generateRandomShapeCmd =
-                    if newShapeRequested then
-                        generateRandomShape
-
-                    else
-                        Cmd.none
             in
             case nextBlocks.highlighted of
                 [] ->
                     -- No animation required as there are no highlighted blocks
                     Continue
-                        (Playing
-                            { currentPlayingModel | game = game, normalBlocks = nextBlocks.normal, highlightAnimation = Nothing }
+                        ( Playing
+                            { playingModel | game = playingModel.game, normalBlocks = nextBlocks.normal, highlightAnimation = Nothing }
+                        , updateResultCmd
                         )
-                        (allCmds [ generateRandomShapeCmd ])
 
                 _ ->
                     -- There are some blocks we need to animate, but this animation might already be in progress (e.g.
                     -- if a block is on the bottom row but the user moves it left/right - it can just continue its
                     -- current animation).
-                    case currentPlayingModel.highlightAnimation of
+                    case playingModel.highlightAnimation of
                         Nothing ->
-                            ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding
-                            , allCmds [ generateRandomShapeCmd ]
-                            )
-                                |> continueFromModelCmdTuple
+                            Continue
+                                ( startNewAnimation playingModel nextBlocks HighlightAnimation.ShapeLanding
+                                , updateResultCmd
+                                )
 
                         Just currentAnimation ->
                             if HighlightAnimation.highlightAnimationType currentAnimation == HighlightAnimation.ShapeLanding then
                                 -- Just continue this current animation, but update the blocks on it
                                 Continue
-                                    (Playing
-                                        { currentPlayingModel
-                                            | game = game
+                                    ( Playing
+                                        { playingModel
+                                            | game = playingModel.game
                                             , normalBlocks = nextBlocks.normal
                                             , highlightAnimation =
                                                 Just <| HighlightAnimation.withBlocks nextBlocks.highlighted currentAnimation
                                         }
+                                    , updateResultCmd
                                     )
-                                    (allCmds [ generateRandomShapeCmd ])
 
                             else
-                                ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.ShapeLanding
-                                , allCmds [ generateRandomShapeCmd ]
-                                )
-                                    |> continueFromModelCmdTuple
+                                Continue
+                                    ( startNewAnimation playingModel nextBlocks HighlightAnimation.ShapeLanding
+                                    , updateResultCmd
+                                    )
 
         Game.RowBeingRemoved { game } ->
             let
-                nextBlocks =
-                    Game.blocks game
+                playingModel =
+                    { currentPlayingModel | game = game }
             in
-            ( startNewAnimation currentPlayingModel game nextBlocks HighlightAnimation.RowRemoval
-              -- Don't call allCmds here - if a row is being removed we _don't_ want a timer drop delay to start yet.
-            , generateRandomShape
-            )
-                |> continueFromModelCmdTuple
+            -- Don't call updateResultCmd here - if a row is being removed we _don't_ want a timer drop delay to start yet.
+            Continue
+                ( startNewAnimation playingModel (Game.blocks game) HighlightAnimation.RowRemoval
+                , Cmd.none
+                )
 
         Game.GameOver { game } ->
             GameOver game
 
 
-continueFromModelCmdTuple : ( Model, Cmd Msg ) -> UpdateResult
-continueFromModelCmdTuple ( model, cmd ) =
-    Continue model cmd
-
-
 {-| Starts a new animation.
 -}
-startNewAnimation : PlayingModel -> Game -> Game.GameBlockInfo -> HighlightAnimation.Type -> Model
-startNewAnimation currentPlayingModel game blocks animationType =
+startNewAnimation : PlayingModel -> Game.GameBlockInfo -> HighlightAnimation.Type -> Model
+startNewAnimation currentPlayingModel blocks animationType =
     let
         animationModel =
             HighlightAnimation.startNewAnimation
@@ -319,8 +303,7 @@ startNewAnimation currentPlayingModel game blocks animationType =
     in
     Playing
         { currentPlayingModel
-            | game = game
-            , normalBlocks = blocks.normal
+            | normalBlocks = blocks.normal
             , nextAnimationId = HighlightAnimation.nextAnimationId currentPlayingModel.nextAnimationId
             , highlightAnimation = Just animationModel
         }
@@ -349,17 +332,17 @@ handleAnimationMsg model msg =
                 Just currentAnimation ->
                     case HighlightAnimation.update msg currentAnimation of
                         HighlightAnimation.IgnoreMsg ->
-                            Continue model Cmd.none
+                            Continue ( model, Cmd.none )
 
                         HighlightAnimation.Continue nextAnimationModel ->
-                            Continue (Playing { playingModel | highlightAnimation = Just nextAnimationModel }) Cmd.none
+                            Continue ( Playing { playingModel | highlightAnimation = Just nextAnimationModel }, Cmd.none )
 
                         HighlightAnimation.Complete ->
                             case HighlightAnimation.highlightAnimationType currentAnimation of
                                 HighlightAnimation.ShapeLanding ->
                                     -- We've finished animating a shape landing: stop animating. Whenever the timerDrop
                                     -- subscription fires next the game will move on.
-                                    Continue (Playing { playingModel | highlightAnimation = Nothing }) Cmd.none
+                                    Continue ( Playing { playingModel | highlightAnimation = Nothing }, Cmd.none )
 
                                 HighlightAnimation.RowRemoval ->
                                     -- When we've finished animating rows about to be removed, call
@@ -370,51 +353,21 @@ handleAnimationMsg model msg =
                                             Game.onRowRemovalAnimationComplete playingModel.game
                                     in
                                     Continue
-                                        (Playing
+                                        ( Playing
                                             { playingModel
                                                 | game = nextGame
                                                 , timerDropDelay = max (playingModel.timerDropDelay - 10) 100
                                                 , normalBlocks = (Game.blocks nextGame).normal
                                                 , highlightAnimation = Nothing
                                             }
+                                        , timerDropDelayCmd playingModel
                                         )
-                                        (timerDropDelayCmd playingModel)
 
                 Nothing ->
-                    Continue model Cmd.none
+                    Continue ( model, Cmd.none )
 
         _ ->
-            Continue model Cmd.none
-
-
-
--- RANDOM SHAPE GENERATION
-
-
-generateRandomShape : Cmd Msg
-generateRandomShape =
-    Random.generate RandomShapeGenerated RandomShapeGenerator.generator
-
-
-{-| Generator of the random data required to start a new game.
--}
-initialGameDataGenerator : Random.Generator Game.InitialisationInfo
-initialGameDataGenerator =
-    Random.map3 Game.InitialisationInfo RandomShapeGenerator.generator RandomShapeGenerator.generator shapeBufferGenerator
-
-
-{-| Generator of a list of random shapes (of length 5). See the `Game` module's comments for details of the random shape
-buffer.
--}
-shapeBufferGenerator : Random.Generator (List Shape)
-shapeBufferGenerator =
-    Random.map5
-        (\s1 s2 s3 s4 s5 -> [ s1, s2, s3, s4, s5 ])
-        RandomShapeGenerator.generator
-        RandomShapeGenerator.generator
-        RandomShapeGenerator.generator
-        RandomShapeGenerator.generator
-        RandomShapeGenerator.generator
+            Continue ( model, Cmd.none )
 
 
 

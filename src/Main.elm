@@ -40,7 +40,7 @@ init _ =
     --            }
     --in
     --( GameOver <| GameOver.init newGame, Cmd.none )
-    ( Welcome WelcomeScreen.init, Cmd.none )
+    WelcomeScreen.init |> updateSubModel Welcome GotWelcomeScreenMsg
 
 
 
@@ -74,15 +74,14 @@ update msg model =
             ( model, Cmd.none )
 
         ( Welcome welcomeModel, GotWelcomeScreenMsg welcomeScreenMsg ) ->
-            WelcomeScreen.update welcomeScreenMsg welcomeModel
-                |> updateSubModel Welcome GotWelcomeScreenMsg
+            ( WelcomeScreen.update welcomeScreenMsg welcomeModel |> Welcome, Cmd.none )
 
         ( _, GotWelcomeScreenMsg _ ) ->
             ( model, Cmd.none )
 
         ( Playing playingModel, GotPlayingGameMsg playingMsg ) ->
             case UserGame.update playingMsg playingModel of
-                UserGame.Continue nextPlayingModel nextPlayingCmd ->
+                UserGame.Continue ( nextPlayingModel, nextPlayingCmd ) ->
                     ( nextPlayingModel, nextPlayingCmd )
                         |> updateSubModel Playing GotPlayingGameMsg
 
@@ -98,7 +97,7 @@ update msg model =
                     ( GameOver nextGameOverModel, Cmd.none )
 
                 GameOver.Done ->
-                    ( Welcome WelcomeScreen.init, Cmd.none )
+                    init ()
 
         ( _, GotGameOverMsg _ ) ->
             ( model, Cmd.none )

@@ -1,7 +1,6 @@
 module ShapeUtils exposing (ExpectedShape, Orientation(..), ShapeType(..), expectEquals, getExpectedShape, getShape)
 
 import AsciiGrid
-import BlockColour exposing (BlockColour)
 import Coord exposing (Coord)
 import Dict
 import Expect exposing (Expectation)
@@ -29,18 +28,18 @@ type Orientation
     | OneEightyOrientation
 
 
-{-| Defines a shape that we can test against, namely a colour and the coordinates of the blocks in the shape.
+{-| Defines a shape that we can test against, namely the coordinates of the blocks in the shape.
 -}
 type ExpectedShape
-    = ExpectedShape BlockColour (List Coord)
+    = ExpectedShape (List Coord)
 
 
 {-| Gets a shape of the given type, when the given colour, in the initial orientation in which it will be shown in the
 game.
 -}
-getShape : BlockColour -> ShapeType -> Shape
-getShape colour shapeType =
-    -- Shape is an opaque type so we can't construct shapes ourselves here. Instead, we use the `shapeBuilders` function
+getShape : ShapeType -> Shape
+getShape shapeType =
+    -- Shape is an opaque type so we can't construct shapes ourselves here. Instead, we use the `allShapes` function
     -- and ask it to create all the shapes for us, then we look for the one that has the same blocks as those which we're
     -- trying to create.
     let
@@ -48,9 +47,8 @@ getShape colour shapeType =
         blockCoords =
             shapeCoords InitialOrientation shapeType
     in
-    Shape.builders
+    Shape.allShapes
         |> (\( first, rest ) -> first :: rest)
-        |> List.map (\build -> build colour)
         |> List.filter (\shape_ -> (Shape.data shape_ |> .blocks |> List.sort) == blockCoords)
         |> List.head
         -- Crash the test if shape not found - means a bug in the test code somewhere.
@@ -66,9 +64,9 @@ getShape colour shapeType =
 
 {-| Gets an expected shape (shape data to test actual Shape values against), of the given type, colour and orientation.
 -}
-getExpectedShape : BlockColour -> Orientation -> ShapeType -> ExpectedShape
-getExpectedShape colour orientation shapeType =
-    ExpectedShape colour (shapeCoords orientation shapeType)
+getExpectedShape : Orientation -> ShapeType -> ExpectedShape
+getExpectedShape orientation shapeType =
+    ExpectedShape (shapeCoords orientation shapeType)
 
 
 {-| Gets a list of the coordinates of a shape of the given type, when at the given orientation.
@@ -87,12 +85,12 @@ shapeCoords orientation shapeType =
 {-| An expectation to be used in tests, which will ensure that the actual shape matches the expected shape.
 -}
 expectEquals : ExpectedShape -> Shape -> Expectation
-expectEquals (ExpectedShape expectedColour expectedBlocks) actual =
+expectEquals (ExpectedShape expectedBlocks) actual =
     let
         { colour, blocks } =
             Shape.data actual
     in
-    Expect.equal ( expectedColour, expectedBlocks ) ( colour, List.sort blocks )
+    List.sort blocks |> Expect.equal expectedBlocks
 
 
 toAsciiShape : Orientation -> AsciiShapeTemplate -> String

@@ -6,12 +6,12 @@ Uses SVG but exposes no SVG information so that a different rendering technology
 
 -}
 
-import BlockColour exposing (BlockColour)
 import Color exposing (Color)
 import Coord exposing (Coord)
 import Element exposing (Element)
 import Element.Border
 import HighlightAnimation
+import Shape
 import TypedSvg as Svg exposing (svg)
 import TypedSvg.Attributes as SvgA
 import TypedSvg.Core exposing (Svg)
@@ -44,7 +44,7 @@ type BorderStyle
 {-| Describes a block to be rendered, namely its coordinates on the board, its colour, and its opacity.
 -}
 type alias BlockViewInfo =
-    { coord : Coord, colour : BlockColour, opacity : Float }
+    { coord : Coord, colour : Shape.BlockColour, opacity : Float }
 
 
 {-| Renders the current state of the board into an HTML element, using SVG.
@@ -76,16 +76,14 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                 []
 
         normalBlocksSvg =
-            drawBlocks config BlockColour.toLightColour BlockColour.toDarkColour normalBlocks
+            drawBlocks config identity normalBlocks
 
         highlightedBlocksSvg =
             case highlightAnimation of
                 Just animation ->
                     HighlightAnimation.animatedBlocks animation
                         |> withOpacity (HighlightAnimation.animatedOpacity animation)
-                        |> drawBlocks config
-                            (BlockColour.toLightColour >> HighlightAnimation.animatedColour animation)
-                            (BlockColour.toDarkColour >> HighlightAnimation.animatedColour animation)
+                        |> drawBlocks config (HighlightAnimation.animatedColour animation)
 
                 Nothing ->
                     []
@@ -94,7 +92,7 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
         (Element.html <|
             svg
                 [ SvgA.width <| boardSizeX config, SvgA.height <| boardSizeY config ]
-                ([ background ]
+                ([ blockSvgDefs config.cellSize, background ]
                     ++ grid config
                     ++ normalBlocksSvg
                     ++ highlightedBlocksSvg
@@ -106,14 +104,14 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
 {-| Converts a list of tuples containing coordinates and colour into a list of `BlockViewInfo`, by setting the specified
 opacity on each one (and converting the tuples to records).
 -}
-withOpacity : Float -> List ( Coord, BlockColour ) -> List BlockViewInfo
+withOpacity : Float -> List ( Coord, Shape.BlockColour ) -> List BlockViewInfo
 withOpacity opacity blocks =
     blocks |> List.map (\( coord, colour ) -> { coord = coord, colour = colour, opacity = opacity })
 
 
 {-| Converts a list of coordinates to a tuple containing the coordinates and the given colour.
 -}
-withColour : BlockColour -> List Coord -> List ( Coord, BlockColour )
+withColour : Shape.BlockColour -> List Coord -> List ( Coord, Shape.BlockColour )
 withColour colour coords =
     coords |> List.map (\coord -> ( coord, colour ))
 
@@ -144,14 +142,107 @@ fadeEdgesOverlay colourToFadeTo =
     ]
 
 
-{-| Draws the supplied blocks using the given functions to get the actual colours to apply to each one.
+{-| Draws the supplied blocks using the given functions to get the actual colours to apply to each one. `colourConverter`
+is a function which is used to take the block's default colour and transform it (e.g. during an animation).
 -}
-drawBlocks : Config -> (BlockColour -> Color) -> (BlockColour -> Color) -> List BlockViewInfo -> List (Svg msg)
-drawBlocks config toLightColour toDarkColour blocks =
+drawBlocks : Config -> (Color -> Color) -> List BlockViewInfo -> List (Svg msg)
+drawBlocks config colourConverter blocks =
     blocks
         |> List.map
-            (\{ coord, colour, opacity } -> drawBlock config coord opacity (toLightColour colour) (toDarkColour colour))
-        |> List.concat
+            (\{ coord, colour, opacity } -> drawBlock config coord opacity (blockColour colour |> colourConverter))
+
+
+{-| Draws a block at the given coordinate, and of the given colour.
+-}
+drawBlock : Config -> Coord -> Float -> Color -> Svg msg
+drawBlock config coord opacity colour =
+    let
+        ( x1, y1 ) =
+            coordToGridPos config coord
+                |> Tuple.mapBoth ((+) 1) ((+) 1)
+                |> Tuple.mapBoth toFloat toFloat
+    in
+    Svg.use
+        [ SvgA.xlinkHref "#block"
+        , SvgA.x <| SvgT.px x1
+        , SvgA.y <| SvgT.px y1
+        , SvgA.fill <| SvgT.Paint colour
+        , SvgA.opacity <| SvgT.Opacity opacity
+        ]
+        []
+
+
+{-| Gets the SVG `defs` which is referred to by every block. Defines the way that a block is rendered.
+
+Taken from <https://upload.wikimedia.org/wikipedia/commons/3/39/Tetrominoes_IJLO_STZ_Worlds.svg>
+
+-}
+blockSvgDefs : Int -> Svg msg
+blockSvgDefs cellSize =
+    let
+        blockSize =
+            cellSize - 2 |> toFloat
+
+        edgeSize =
+            blockSize / 8
+
+        raisedInnerSize =
+            blockSize - (2 * edgeSize)
+
+        numberPair : Float -> Float -> String
+        numberPair f1 f2 =
+            String.join " " [ String.fromFloat f1, String.fromFloat f2 ]
+    in
+    Svg.defs []
+        [ Svg.g [ SvgA.id "block" ]
+            [ Svg.rect [ SvgA.height <| SvgT.px blockSize, SvgA.width <| SvgT.px blockSize ] []
+
+            -- TODO: use folkertdev/svg-path-dsl instead of strings here?
+            , Svg.path
+                [ SvgA.fill <| SvgT.Paint <| Color.rgb255 230 230 230
+                , SvgA.opacity <| SvgT.Opacity 0.7
+                , SvgA.d <|
+                    String.join ","
+                        [ "m0"
+                        , numberPair 0 edgeSize
+                        , numberPair edgeSize raisedInnerSize
+                        , numberPair 0 edgeSize
+                        , String.fromFloat -edgeSize
+                        ]
+                ]
+                []
+            , Svg.path
+                [ SvgA.fill <| SvgT.Paint Color.black
+                , SvgA.opacity <| SvgT.Opacity 0.1
+                , SvgA.d <|
+                    String.join ","
+                        [ "m0"
+                        , numberPair 0 edgeSize
+                        , numberPair edgeSize 0
+                        , numberPair raisedInnerSize -edgeSize
+                        , String.fromFloat edgeSize ++ " m" ++ String.fromFloat blockSize
+                        , numberPair -blockSize -edgeSize
+                        , numberPair edgeSize 0
+                        , numberPair raisedInnerSize edgeSize
+                        , String.fromFloat edgeSize
+                        ]
+                ]
+                []
+            , Svg.path
+                [ SvgA.fill <| SvgT.Paint Color.black
+                , SvgA.opacity <| SvgT.Opacity 0.5
+                , SvgA.d <|
+                    String.join ","
+                        [ "m0"
+                        , numberPair blockSize edgeSize
+                        , numberPair -edgeSize raisedInnerSize
+                        , numberPair 0 edgeSize
+                        , String.fromFloat edgeSize
+                        ]
+                ]
+                []
+            ]
+        ]
 
 
 {-| Draws the vertical and horizontal lines on the board that make it look like a grid.
@@ -193,51 +284,10 @@ gridLine ({ cellSize } as config) direction index =
         , SvgA.y1 y1
         , SvgA.x2 x2
         , SvgA.y2 y2
-        , SvgA.stroke <| SvgT.Paint Color.lightGray
-        , SvgA.strokeWidth <| SvgT.px 0.15
-
-        -- Render the lines with crisp edges as they're very thin - otherwise they can end up with alternating lines
-        -- seeming like they have slightly different thicknesses
-        , SvgA.shapeRendering SvgT.RenderCrispEdges
+        , SvgA.stroke <| SvgT.Paint <| Color.rgb255 30 30 30
+        , SvgA.strokeWidth <| SvgT.px 1
         ]
         []
-
-
-{-| Draws a block at the given coordinate, and of the given colour.
--}
-drawBlock : Config -> Coord -> Float -> Color -> Color -> List (Svg msg)
-drawBlock config coord opacity lightColour darkColour =
-    let
-        ( x1, y1 ) =
-            coordToGridPos config coord
-                |> Tuple.mapBoth ((+) 1) ((+) 1)
-                |> Tuple.mapBoth toFloat toFloat
-
-        innerSize =
-            config.cellSize - 2 |> toFloat
-    in
-    [ -- The main block (square)
-      Svg.rect
-        [ SvgA.x <| SvgT.px x1
-        , SvgA.y <| SvgT.px y1
-        , SvgA.width <| SvgT.px innerSize
-        , SvgA.height <| SvgT.px innerSize
-        , SvgA.fill <| SvgT.Paint lightColour
-        , SvgA.opacity <| SvgT.Opacity opacity
-        ]
-        []
-    , -- A triangle of a slightly darker colour.
-      Svg.polygon
-        [ SvgA.points
-            [ ( x1 + innerSize, y1 + innerSize )
-            , ( x1 + innerSize, y1 )
-            , ( x1, y1 + innerSize )
-            ]
-        , SvgA.fill <| SvgT.Paint darkColour
-        , SvgA.opacity <| SvgT.Opacity opacity
-        ]
-        []
-    ]
 
 
 {-| Gets the position on the grid of the bottom left hand corner of a cell with the supplied coordinates.
@@ -264,3 +314,28 @@ boardSizeY { cellSize, rowCount } =
 elmUIColourToColour : Element.Color -> Color
 elmUIColourToColour =
     Element.toRgb >> Color.fromRgba
+
+
+blockColour : Shape.BlockColour -> Color
+blockColour colour =
+    case colour of
+        Shape.Cyan ->
+            Color.rgb255 0 240 240
+
+        Shape.Blue ->
+            Color.rgb255 0 0 240
+
+        Shape.Orange ->
+            Color.rgb255 240 160 0
+
+        Shape.Yellow ->
+            Color.rgb255 240 240 0
+
+        Shape.Green ->
+            Color.rgb255 0 240 0
+
+        Shape.Purple ->
+            Color.rgb255 160 0 240
+
+        Shape.Red ->
+            Color.rgb255 240 0 0

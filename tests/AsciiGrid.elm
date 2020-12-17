@@ -16,9 +16,9 @@ cell is empty.
 
 -}
 
-import BlockColour exposing (BlockColour)
 import Coord exposing (Coord)
 import Dict exposing (Dict)
+import Shape
 
 
 {-| Parses the passed in textual representation of a grid of blocks, and returns a list of the blocks which are
@@ -75,13 +75,13 @@ build asciiGrid config =
 
 {-| The configuration dictionary to supply to `AsciiGrid.Build` which maps each character to its corresponding colour.
 -}
-blockColourConfig : Dict Char BlockColour
+blockColourConfig : Dict Char Shape.BlockColour
 blockColourConfig =
     Dict.fromList
-        [ ( 'b', BlockColour.Blue )
-        , ( 'r', BlockColour.Red )
-        , ( 'o', BlockColour.Orange )
-        , ( 'y', BlockColour.Yellow )
-        , ( 'p', BlockColour.Purple )
-        , ( 'g', BlockColour.Green )
+        [ ( 'b', Shape.Blue )
+        , ( 'r', Shape.Red )
+        , ( 'o', Shape.Orange )
+        , ( 'y', Shape.Yellow )
+        , ( 'p', Shape.Purple )
+        , ( 'g', Shape.Green )
         ]

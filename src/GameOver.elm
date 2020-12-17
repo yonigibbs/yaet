@@ -4,7 +4,6 @@ module GameOver exposing (Model, Msg, UpdateResult(..), init, subscriptions, upd
 animating a "Game Over" message on top of it, then fading the game out.
 -}
 
-import BlockColour exposing (BlockColour)
 import BoardView
 import Browser.Events
 import Coord exposing (Coord)
@@ -13,6 +12,7 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Game exposing (Game)
+import Shape
 import UIHelpers
 import UserGame
 
@@ -38,14 +38,14 @@ type Animation
 {-| The data associated with the model (which is an opaque type).
 -}
 type alias ModelData =
-    { blocks : List ( Coord, BlockColour ), animation : Animation }
+    { blocks : List ( Coord, Shape.BlockColour ), animation : Animation }
 
 
 type Model
     = Model ModelData
 
 
-init : Game -> Model
+init : Game shapeBuffer -> Model
 init game =
     Model
         { blocks = (Game.blocks game).normal
@@ -93,7 +93,7 @@ update (AnimationFrame timeSinceLastFrameMs) (Model model) =
             progressAnimation model timeSinceLastFrameMs animationModel FadingOut Nothing
 
 
-{-| Progresses the animation after an animation frame. Each animation knows the toal time it should run for so this will
+{-| Progresses the animation after an animation frame. Each animation knows the total time it should run for so this will
 either continue the current animation if not enough time has elapsed yet (using `ifAnimationContinuing`) or will use
 `ifAnimationOver` to decide how to proceed. If that parameter is a `Nothing` then `Done` is returned, meaning this
 whole module is now finished and the user should be returned to the Welcome screen. Otherwise (i.e. if `ifAnimationOver`

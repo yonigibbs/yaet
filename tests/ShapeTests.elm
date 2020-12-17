@@ -1,6 +1,5 @@
 module ShapeTests exposing (suite)
 
-import BlockColour
 import Shape exposing (Shape)
 import ShapeUtils
 import Test exposing (..)
@@ -39,12 +38,11 @@ rotationTest : String -> ShapeUtils.ShapeType -> Shape.RotationDirection -> Int 
 rotationTest testDescr shapeType direction turns expectedOrientation =
     test testDescr <|
         \_ ->
-            -- Colour doesn't matter here so just use blue for everything
             let
                 expectedShape =
-                    ShapeUtils.getExpectedShape BlockColour.Blue expectedOrientation shapeType
+                    ShapeUtils.getExpectedShape expectedOrientation shapeType
             in
-            ShapeUtils.getShape BlockColour.Blue shapeType
+            ShapeUtils.getShape shapeType
                 |> rotateXTimes direction turns
                 |> ShapeUtils.expectEquals expectedShape
 

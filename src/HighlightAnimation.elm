@@ -21,10 +21,10 @@ it out then back in) and when one or more rows are about to disappear (which is 
 briefly.
 -}
 
-import BlockColour exposing (BlockColour)
 import Browser.Events
 import Color exposing (Color)
 import Coord exposing (Coord)
+import Shape
 
 
 
@@ -87,7 +87,7 @@ type Model
         { id : Id
         , animationType : Type
         , totalTimeMs : Float
-        , blocks : List ( Coord, BlockColour )
+        , blocks : List ( Coord, Shape.BlockColour )
         , elapsedTimeMs : Float
         }
 
@@ -149,7 +149,7 @@ handleAnimationFrame timeSinceLastFrameMs (Model modelData) =
 
 {-| Starts a new animation with the supplied data.
 -}
-startNewAnimation : Id -> Type -> Int -> List ( Coord, BlockColour ) -> Model
+startNewAnimation : Id -> Type -> Int -> List ( Coord, Shape.BlockColour ) -> Model
 startNewAnimation id animationType totalTimeMs blocks =
     Model
         { id = id
@@ -162,7 +162,7 @@ startNewAnimation id animationType totalTimeMs blocks =
 
 {-| Returns an updated copy of the supplied model, with the supplied blocks in it.
 -}
-withBlocks : List ( Coord, BlockColour ) -> Model -> Model
+withBlocks : List ( Coord, Shape.BlockColour ) -> Model -> Model
 withBlocks blocks (Model model) =
     Model { model | blocks = blocks }
 
@@ -180,7 +180,7 @@ highlightAnimationType (Model { animationType }) =
 
 {-| Gets the blocks contained in the supplied model.
 -}
-animatedBlocks : Model -> List ( Coord, BlockColour )
+animatedBlocks : Model -> List ( Coord, Shape.BlockColour )
 animatedBlocks (Model { blocks }) =
     blocks
 
