@@ -3,7 +3,6 @@ module Shape exposing
     , BlockColour(..)
     , RotationDirection(..)
     , Shape
-    , ShapeData
     , allColours
     , allShapes
     , clippedBlocks
@@ -11,6 +10,7 @@ module Shape exposing
     , data
     , next
     , rotate
+    , withOrgRotation
     )
 
 {-| A shape represents a set of four contiguous blocks currently falling from the top of the board to the bottom. Once
@@ -104,7 +104,7 @@ type Shape
 {-| The data associated with a `Shape`.
 -}
 type alias ShapeData =
-    { gridSize : Int, blocks : List Coord, colour : BlockColour }
+    { gridSize : Int, blocks : List Coord, colour : BlockColour, orgBlocks : List Coord }
 
 
 {-| The direction in which a shape can be rotated.
@@ -116,9 +116,9 @@ type RotationDirection
 
 {-| Gets the data associated with the passed in shape.
 -}
-data : Shape -> ShapeData
-data (Shape shapeData) =
-    shapeData
+data : Shape -> { gridSize : Int, blocks : List Coord, colour : BlockColour }
+data (Shape { gridSize, blocks, colour }) =
+    { gridSize = gridSize, blocks = blocks, colour = colour }
 
 
 {-| All the shapes used in the game. Returned as a tuple to represent a "non-empty list" rather than just a normal list,
@@ -127,9 +127,9 @@ as this is required in a few places.
 allShapes : ( Shape, List Shape )
 allShapes =
     -- Straight line (initially horizontal)
-    ( Shape { gridSize = 4, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 2, 2 ), ( 3, 2 ) ], colour = Cyan }
+    ( createShape { gridSize = 4, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 2, 2 ), ( 3, 2 ) ], colour = Cyan }
     , List.map
-        Shape
+        createShape
         [ -- L-shape on its back:
           --     x
           -- x x x
@@ -156,6 +156,11 @@ allShapes =
           { gridSize = 2, blocks = [ ( 0, 0 ), ( 0, 1 ), ( 1, 0 ), ( 1, 1 ) ], colour = Yellow }
         ]
     )
+
+
+createShape : { gridSize : Int, blocks : List Coord, colour : BlockColour } -> Shape
+createShape { gridSize, blocks, colour } =
+    Shape { gridSize = gridSize, blocks = blocks, colour = colour, orgBlocks = blocks }
 
 
 {-| Rotates the supplied shape in the given direction.
@@ -252,6 +257,14 @@ clippedBlocks (Shape { blocks }) =
                     ( -1, -1 )
     in
     blocks |> List.map (\( x, y ) -> ( x - minX, y - minY ))
+
+
+{-| Gets a copy of the supplied shape, with the rotation as it was when the shape was originally created (i.e. before it
+was rotated any number of times by the user).
+-}
+withOrgRotation : Shape -> Shape
+withOrgRotation (Shape shapeData) =
+    Shape { shapeData | blocks = shapeData.orgBlocks }
 
 
 

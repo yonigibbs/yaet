@@ -6,6 +6,7 @@ module Game exposing
     , UserAction(..)
     , blocks
     , executeUserActions
+    , holdShape
     , new
     , onRowRemovalAnimationComplete
     , previewLandingBlocks
@@ -60,7 +61,16 @@ type alias Model shapeBuffer =
     , state : GameState -- The current state (see `GameState` for more details).
     , nextShape : Shape -- The next shape to use as the dropping shape once the current one lands.
     , shapeBuffer : shapeBuffer -- A buffer used to get more shapes on demand.
+    , holdInfo : Maybe HoldInfo -- Information about the shape currently in the Hold area, if any.
     }
+
+
+{-| Defines the shape currently in the Hold area. Contains the `shape` itself, along with an `allowSwap` flag which
+defines whether it's valid for the user to swap the currently dropping shape with this one. This is false initially when
+a shape is first put into hold, and true once the shape it's swapped with lands.
+-}
+type alias HoldInfo =
+    { shape : Shape, allowSwap : Bool }
 
 
 {-| The current state the game is in:
@@ -123,6 +133,7 @@ new getShape shapeBuffer =
         , state = RegularGameState { droppingShape = initDroppingShape initialShape }
         , nextShape = nextShape
         , shapeBuffer = shapeBuffer_
+        , holdInfo = Nothing
         }
 
 
@@ -161,6 +172,7 @@ type UserAction
     = Move MoveDirection
     | DropToBottom
     | Rotate Shape.RotationDirection
+    | Hold
 
 
 {-| The result of executing a single user action:
@@ -181,8 +193,9 @@ type UserActionResult
     go on the board). The game's model hasn't changed as a result of this attempt.
   - `Continue`: the game should continue as normal. The variant contains the following data:
       - `game`: The updated game.
-      - `shapedDropped`: Boolean flag indicated whether the currently dropping shape was dropped. If so then the timer
-        set up to automatically drop a shape every so often should be reset, now the user has done this manually.
+      - `shapeRowChanged`: Boolean flag indicated whether the currently dropping shape is now on a different row. If so
+        then the timer set up to automatically drop a shape every so often should be reset, typically because now the
+        user has done this manually (or they used the Hold feature).
   - `RowBeingRemoved`: one or more rows are being removed. This means that the parent module should now animate any
     highlighted blocks with the animation used for rows being removed (a "flash" effect). When that animation is
     complete, it should call `onRowRemovalAnimationComplete` again, which will remove those rows and drop all the other
@@ -194,7 +207,7 @@ See comments on this module for an explanation of the `shapeBuffer` type paramet
 -}
 type MoveResult shapeBuffer
     = NoChange
-    | Continue { game : Game shapeBuffer, shapeDropped : Bool }
+    | Continue { game : Game shapeBuffer, shapeRowChanged : Bool }
     | RowBeingRemoved { game : Game shapeBuffer }
     | GameOver { game : Game shapeBuffer }
 
@@ -226,38 +239,71 @@ timerDrop getShape ((Game ({ state, board } as model)) as game) =
 {-| Executes the supplied of user actions (e.g. moves the dropping shape left and down, if those keys are currently
 being held down).
 -}
-executeUserActions : List UserAction -> Game shapeBuffer -> MoveResult shapeBuffer
-executeUserActions actions (Game ({ state, board } as model)) =
+executeUserActions : GetShape shapeBuffer -> List UserAction -> Game shapeBuffer -> MoveResult shapeBuffer
+executeUserActions getShape actions (Game ({ state, board, holdInfo } as model)) =
     case state of
         RegularGameState { droppingShape } ->
-            -- TODO: if any of the actions is Drop with a DropType of ToBottom then ignore all other actions and
-            -- just execute that single action.
-            -- TODO: if the actions are "drop down" and "move left", and the shape is directly on top of another
-            -- it cannot be dropped down, but can be moved left, so that's all that'll happen. But it might be that
-            -- once it's moved left it _can_ now be dropped down. Consider handling this edge case.
-            let
-                -- Execute all the actions, and keep a boolean (anyChanges) which is set to true if any changes were made.
-                ( newDroppingShape, anyChanges ) =
-                    actions
-                        |> List.foldl
-                            (\action ( accDroppingShape, accAnyChanges ) ->
-                                case executeUserAction board accDroppingShape action of
-                                    NotAllowed ->
-                                        ( accDroppingShape, accAnyChanges )
-
-                                    Allowed updatedDroppingShape ->
-                                        ( updatedDroppingShape, True )
-                            )
-                            ( droppingShape, False )
-            in
-            if anyChanges then
-                continueWithUpdatedDroppingShape droppingShape newDroppingShape model
+            -- If attempting a Hold action then only run that single action and ignore the rest.
+            if List.any isHoldAction actions then
+                executeHoldAction getShape model droppingShape
 
             else
-                NoChange
+                let
+                    -- If any of the actions is Drop with a DropType of ToBottom then ignore all other actions and just
+                    -- execute that single action.
+                    actionsToExecute =
+                        if List.any isDropToBottomAction actions then
+                            [ DropToBottom ]
+
+                        else
+                            actions
+                in
+                -- TODO: if the actions are "drop down" and "move left", and the shape is directly on top of another
+                -- it cannot be dropped down, but can be moved left, so that's all that'll happen. But it might be that
+                -- once it's moved left it _can_ now be dropped down. Consider handling this edge case.
+                let
+                    -- Execute all the actions, and keep a boolean (anyChanges) which is set to true if any changes were made.
+                    ( newDroppingShape, anyChanges ) =
+                        actionsToExecute
+                            |> List.foldl
+                                (\action ( accDroppingShape, accAnyChanges ) ->
+                                    case executeUserAction board accDroppingShape action of
+                                        NotAllowed ->
+                                            ( accDroppingShape, accAnyChanges )
+
+                                        Allowed updatedDroppingShape ->
+                                            ( updatedDroppingShape, True )
+                                )
+                                ( droppingShape, False )
+                in
+                if anyChanges then
+                    continueWithUpdatedDroppingShape droppingShape newDroppingShape model
+
+                else
+                    NoChange
 
         RowRemovalGameState _ ->
             NoChange
+
+
+isHoldAction : UserAction -> Bool
+isHoldAction action =
+    case action of
+        Hold ->
+            True
+
+        _ ->
+            False
+
+
+isDropToBottomAction : UserAction -> Bool
+isDropToBottomAction action =
+    case action of
+        DropToBottom ->
+            True
+
+        _ ->
+            False
 
 
 {-| Attempts to execute the supplied user action and returns a result defining whether or not the action was allowed.
@@ -287,6 +333,46 @@ executeUserAction board droppingShape action =
 
                 Nothing ->
                     NotAllowed
+
+        Hold ->
+            Debug.todo "Implement hold"
+
+
+{-| Swaps the currently dropping shape with the shape previously put into hold (if there is one) or the next dropping
+shape (if there isn't). Only does this if possible.
+-}
+executeHoldAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> MoveResult shapeBuffer
+executeHoldAction getShape ({ board, holdInfo, nextShape } as model) currentDroppingShape =
+    let
+        ( isSwapAllowed, shapeToSwap, buildModel ) =
+            case holdInfo of
+                Just currentHoldInfo ->
+                    ( currentHoldInfo.allowSwap, currentHoldInfo.shape, identity )
+
+                Nothing ->
+                    ( True, nextShape, withNextShape getShape )
+    in
+    if isSwapAllowed then
+        let
+            newDroppingShape =
+                initDroppingShape shapeToSwap
+        in
+        if isValidPosition board newDroppingShape then
+            let
+                newModel =
+                    { model
+                        | holdInfo = Just { shape = Shape.withOrgRotation currentDroppingShape.shape, allowSwap = False }
+                        , state = RegularGameState { droppingShape = newDroppingShape }
+                    }
+                        |> buildModel
+            in
+            Continue { game = Game newModel, shapeRowChanged = True }
+
+        else
+            NoChange
+
+    else
+        NoChange
 
 
 {-| Gets the next valid position for a rotate shape, if one exists. Moves the shape back onto the board if its rotation
@@ -328,7 +414,7 @@ handleDroppingShapeLanded getShape droppingShape (Game ({ state, board, nextShap
             DroppingShape.calcShapeBlocksBoardCoords droppingShape |> GameBoard.append board colour
 
         nextModel =
-            model |> withBoard nextBoard |> withNextShape getShape
+            model |> withBoard nextBoard |> withNextShape getShape |> withAllowHoldSwap
 
         newDroppingShape =
             initDroppingShape nextShape
@@ -371,6 +457,21 @@ withNextShape getShape model =
     { model | nextShape = nextShape, shapeBuffer = nextBuffer }
 
 
+withAllowHoldSwap : Model shapeBuffer -> Model shapeBuffer
+withAllowHoldSwap model =
+    case model.holdInfo of
+        Just holdInfo ->
+            let
+                newHoldInfo =
+                    { holdInfo | allowSwap = True }
+            in
+            { model | holdInfo = Just newHoldInfo }
+
+        Nothing ->
+            -- Having no hold info means we can swap
+            model
+
+
 continueWithUpdatedDroppingShape : DroppingShape -> DroppingShape -> Model shapeBuffer -> MoveResult shapeBuffer
 continueWithUpdatedDroppingShape orgDroppingShape newDroppingShape model =
     let
@@ -379,7 +480,7 @@ continueWithUpdatedDroppingShape orgDroppingShape newDroppingShape model =
     in
     Continue
         { game = Game { model | state = RegularGameState { droppingShape = newDroppingShape } }
-        , shapeDropped = shapedDropped
+        , shapeRowChanged = shapedDropped
         }
 
 
@@ -466,8 +567,15 @@ blocks (Game { board, state }) =
 {-| Gets the upcoming shape in the game.
 -}
 upcomingShape : Game shapeBuffer -> Shape
-upcomingShape (Game game) =
-    game.nextShape
+upcomingShape (Game { nextShape }) =
+    nextShape
+
+
+{-| Gets the upcoming shape in the game.
+-}
+holdShape : Game shapeBuffer -> Maybe Shape
+holdShape (Game { holdInfo }) =
+    holdInfo |> Maybe.map .shape
 
 
 {-| Gets an array of blocks which show where the currently dropping shape would land, were it to land right now (i.e. not

@@ -176,13 +176,13 @@ handleGameControlMsg playingModel gameControlMsg =
             UserGameControl.update playingModel.gameControl gameControlMsg
 
         moveResult =
-            Game.executeUserActions actionsToExecute playingModel.game
+            Game.executeUserActions Shape.next actionsToExecute playingModel.game
 
         -- If a shape was dropped then reset the timer drop delay
         startNewTimerDropDelay =
             case moveResult of
-                Game.Continue { shapeDropped } ->
-                    shapeDropped
+                Game.Continue { shapeRowChanged } ->
+                    shapeRowChanged
 
                 _ ->
                     -- If there was no change, or if the game is no in `RowBeingRemoved` state (i.e. we're "flashing"
@@ -257,6 +257,7 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
                     -- current animation).
                     case playingModel.highlightAnimation of
                         Nothing ->
+                            -- Currently nothing is animated, but now should be, so start a new animation
                             Continue
                                 ( playingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.ShapeLanding |> Playing
                                 , updateResultCmd
@@ -275,7 +276,7 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
                                     )
 
                             else
-                                -- Start a new animation
+                                -- The current animation is different from the one we want now: start a new animation
                                 Continue
                                     ( playingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.ShapeLanding |> Playing
                                     , updateResultCmd
@@ -401,8 +402,8 @@ view model =
                     ( BoardView.withOpacity 1 normalBlocks, previewLandingBlocks, highlightAnimation )
     in
     Element.row [] <|
-        -- TODO: show scores in this first section
-        [ screenSection <| Element.text ""
+        -- TODO: show scores
+        [ screenSection <| holdShapeView model
         , screenSection <|
             Element.el [ Element.centerX ] <|
                 BoardView.view boardViewConfig gameBlocks gamePreviewLandingBlocks animationModel
@@ -415,27 +416,64 @@ view model =
 upcomingShapeView : Model -> Element msg
 upcomingShapeView model =
     let
-        { rowCount, colCount, blocks } =
+        upcomingShape =
             case model of
                 Initialising ->
-                    -- We don't have an upcoming shape yet so render an empty board
-                    { rowCount = 0, colCount = 0, blocks = [] }
+                    Nothing
 
                 Playing { game } ->
-                    -- TODO: we calculate this every time this is rendered - should we cache it like we do the game
-                    -- blocks so it doesn't have to be recalculated multiple times (esp during an animation)?
-                    upcomingShapeBlocks game
+                    Just <| Game.upcomingShape game
+    in
+    shapePreview "Coming next..." upcomingShape
+
+
+{-| Gets a view showing the upcoming shape in the game.
+-}
+holdShapeView : Model -> Element msg
+holdShapeView model =
+    let
+        holdShape =
+            case model of
+                Initialising ->
+                    Nothing
+
+                Playing { game } ->
+                    Game.holdShape game
+    in
+    shapePreview "Hold" holdShape
+
+
+{-| Gets a rectangle showing a preview of a shape (e.g. the next shape to drop, or the shape currently on hold).
+-}
+shapePreview : String -> Maybe Shape -> Element msg
+shapePreview caption maybeShape =
+    let
+        blocks =
+            case maybeShape of
+                Just shape ->
+                    Shape.clippedBlocks shape |> List.map (\coord -> { coord = coord, colour = Shape.data shape |> .colour, opacity = 1 })
+
+                Nothing ->
+                    []
+
+        rowCount =
+            blocks |> List.map (.coord >> Tuple.second) |> List.maximum |> Maybe.withDefault 0 |> (+) 1
+
+        colCount =
+            blocks |> List.map (.coord >> Tuple.first) |> List.maximum |> Maybe.withDefault 0 |> (+) 1
     in
     Element.column
         [ Element.padding 14
         , Element.spacing 20
         , Element.Background.color <| Element.rgb255 0 0 0
         , Element.height <| Element.px 140
+        , Element.width <| Element.px 180
         , Element.Border.color <| Element.rgb255 100 100 100
         , Element.Border.width 2
         , Element.Border.glow (Element.rgb255 200 200 200) 0.1
         ]
-        [ Element.el [ Element.centerX, Element.Font.color <| Element.rgb255 100 100 100 ] <| Element.text "Coming next..."
+        [ Element.el [ Element.centerX, Element.Font.color <| Element.rgb255 100 100 100, Element.Font.semiBold ] <|
+            Element.text caption
         , Element.el [ Element.centerX, Element.centerY, Element.centerX ] <|
             BoardView.view
                 { cellSize = cellSize, rowCount = rowCount, colCount = colCount, borderStyle = BoardView.None, showGridLines = False }
@@ -443,29 +481,6 @@ upcomingShapeView model =
                 []
                 Nothing
         ]
-
-
-{-| Gets the data about the upcoming shape required for rendering in a preview of the upcoming shape.
--}
-upcomingShapeBlocks : Game shapeBuffer -> { rowCount : Int, colCount : Int, blocks : List BoardView.BlockViewInfo }
-upcomingShapeBlocks game =
-    let
-        upcomingShape =
-            Game.upcomingShape game
-
-        blocks =
-            Shape.clippedBlocks upcomingShape
-
-        rowCount =
-            blocks |> List.map Tuple.second |> List.maximum |> Maybe.withDefault 0 |> (+) 1
-
-        colCount =
-            blocks |> List.map Tuple.first |> List.maximum |> Maybe.withDefault 0 |> (+) 1
-    in
-    { rowCount = rowCount
-    , colCount = colCount
-    , blocks = blocks |> List.map (\coord -> { coord = coord, colour = Shape.data upcomingShape |> .colour, opacity = 1 })
-    }
 
 
 {-| The configuration required to render the game.

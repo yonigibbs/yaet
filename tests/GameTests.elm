@@ -21,7 +21,7 @@ suite =
         [ test "Drops initial shape two rows after two timer drop events." <|
             \_ ->
                 newGame defaultInitialGameState
-                    |> repeat 2 (Game.timerDrop getNextShape)
+                    |> repeat 2 timerDrop
                     |> expectGame
                         (ExpectedGame
                             { game = buildAsciiGame BottomPadding """
@@ -36,8 +36,8 @@ suite =
         , test "Highlights landed shape after moving initial shape to left edge then letting it drop to bottom." <|
             \_ ->
                 newGame defaultInitialGameState
-                    |> repeat 3 (Game.executeUserActions [ Game.Move Game.Left ])
-                    |> repeat 18 (Game.timerDrop getNextShape)
+                    |> repeat 3 (executeUserActions [ Game.Move Game.Left ])
+                    |> repeat 18 timerDrop
                     |> expectGame
                         (ExpectedGame
                             { game = buildAsciiGame TopPadding """
@@ -50,8 +50,8 @@ suite =
         , test "Next shape appears after shape drops to bottom (and bottom shape no longer highlighted)." <|
             \_ ->
                 newGame defaultInitialGameState
-                    |> repeat 3 (Game.executeUserActions [ Game.Move Game.Left ])
-                    |> repeat 19 (Game.timerDrop getNextShape)
+                    |> repeat 3 (executeUserActions [ Game.Move Game.Left ])
+                    |> repeat 19 timerDrop
                     |> expectGame
                         (ExpectedGame
                             { game = buildAsciiGame NoPadding """
@@ -83,27 +83,27 @@ suite =
             \_ ->
                 newGame defaultInitialGameState
                     -- Move blue L to the left (will first first three columns)
-                    |> repeat 3 (Game.executeUserActions [ Game.Move Game.Left ])
+                    |> repeat 3 (executeUserActions [ Game.Move Game.Left ])
                     -- Drop it the 18 rows required to get it to the bottom, then timer drop to make next shape appear.
-                    |> repeat 18 (Game.executeUserActions [ Game.Move Game.Down ])
+                    |> repeat 18 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
                     -- Red square has now appeared: move it left one, then drop it to fill columns 4 and 5.
-                    |> progressGame (Game.executeUserActions [ Game.Move Game.Left ])
-                    |> repeat 18 (Game.executeUserActions [ Game.Move Game.Down ])
+                    |> progressGame (executeUserActions [ Game.Move Game.Left ])
+                    |> repeat 18 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
                     -- Yellow line has now appeared: move it right two then drop it to fill columns 6-9 (intersperse
                     -- some timer drops before the user interactions).
                     |> repeat 2 timerDrop
-                    |> progressGame (Game.executeUserActions [ Game.Move Game.Right ])
+                    |> progressGame (executeUserActions [ Game.Move Game.Right ])
                     |> progressGame timerDrop
-                    |> progressGame (Game.executeUserActions [ Game.Move Game.Right ])
-                    |> repeat 15 (Game.executeUserActions [ Game.Move Game.Down ])
+                    |> progressGame (executeUserActions [ Game.Move Game.Right ])
+                    |> repeat 15 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
                     -- Green half-plus has now appeared: it's on its back so rotate it once anti-clockwise then move it
                     -- all the way to the right before dropping it.
-                    |> progressGame (Game.executeUserActions [ Game.Rotate Shape.Anticlockwise ])
-                    |> repeat 5 (Game.executeUserActions [ Game.Move Game.Right ])
-                    |> repeat 17 (Game.executeUserActions [ Game.Move Game.Down ])
+                    |> progressGame (executeUserActions [ Game.Rotate Shape.Anticlockwise ])
+                    |> repeat 5 (executeUserActions [ Game.Move Game.Right ])
+                    |> repeat 17 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
                     |> expectGame
                         (ExpectedGame
@@ -120,21 +120,21 @@ suite =
                 newGame defaultInitialGameState
                     -- Repeat same steps as previous test, then update the game to make the completed row disappear, and
                     -- the next shape appear.
-                    |> repeat 3 (Game.executeUserActions [ Game.Move Game.Left ])
-                    |> repeat 18 (Game.executeUserActions [ Game.Move Game.Down ])
+                    |> repeat 3 (executeUserActions [ Game.Move Game.Left ])
+                    |> repeat 18 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
-                    |> progressGame (Game.executeUserActions [ Game.Move Game.Left ])
-                    |> repeat 18 (Game.executeUserActions [ Game.Move Game.Down ])
+                    |> progressGame (executeUserActions [ Game.Move Game.Left ])
+                    |> repeat 18 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
                     |> repeat 2 timerDrop
-                    |> progressGame (Game.executeUserActions [ Game.Move Game.Right ])
+                    |> progressGame (executeUserActions [ Game.Move Game.Right ])
                     |> progressGame timerDrop
-                    |> progressGame (Game.executeUserActions [ Game.Move Game.Right ])
-                    |> repeat 15 (Game.executeUserActions [ Game.Move Game.Down ])
+                    |> progressGame (executeUserActions [ Game.Move Game.Right ])
+                    |> repeat 15 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
-                    |> progressGame (Game.executeUserActions [ Game.Rotate Shape.Anticlockwise ])
-                    |> repeat 5 (Game.executeUserActions [ Game.Move Game.Right ])
-                    |> repeat 17 (Game.executeUserActions [ Game.Move Game.Down ])
+                    |> progressGame (executeUserActions [ Game.Rotate Shape.Anticlockwise ])
+                    |> repeat 5 (executeUserActions [ Game.Move Game.Right ])
+                    |> repeat 17 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
                     |> simulateRowRemovalAnimationComplete
                     |> expectGame
@@ -167,7 +167,7 @@ suite =
         , test "Does not move shape off board if user tries to move it too much." <|
             \_ ->
                 newGame defaultInitialGameState
-                    |> repeat 20 (Game.executeUserActions [ Game.Move Game.Left ])
+                    |> repeat 20 (executeUserActions [ Game.Move Game.Left ])
                     |> expectGame
                         (ExpectedGame
                             { game = buildAsciiGame BottomPadding """
@@ -182,13 +182,13 @@ suite =
                 -- Start off with the normal L-shape on its back
                 newGame defaultInitialGameState
                     -- Rotate it once so it's the right way up
-                    |> progressGame (Game.executeUserActions [ Game.Rotate Shape.Clockwise ])
+                    |> progressGame (executeUserActions [ Game.Rotate Shape.Clockwise ])
                     -- Move it all the way to the left
-                    |> repeat 5 (Game.executeUserActions [ Game.Move Game.Left ])
+                    |> repeat 5 (executeUserActions [ Game.Move Game.Left ])
                     -- Rotate it clockwise again: naturally this will mean the shape is now off the board so this
                     -- wouldn't be allowed, but we have logic to "shift" it back into place (i.e. go back one cell to
                     -- the right).
-                    |> progressGame (Game.executeUserActions [ Game.Rotate Shape.Clockwise ])
+                    |> progressGame (executeUserActions [ Game.Rotate Shape.Clockwise ])
                     |> expectGame
                         (ExpectedGame
                             { game = buildAsciiGame BottomPadding """
@@ -206,9 +206,9 @@ suite =
                 defaultInitialGameState
                     |> withInitialShape (ShapeUtils.getShape ShapeUtils.Line)
                     |> newGame
-                    |> progressGame (Game.executeUserActions [ Game.Rotate Shape.Clockwise ])
-                    |> repeat 5 (Game.executeUserActions [ Game.Move Game.Right ])
-                    |> progressGame (Game.executeUserActions [ Game.Rotate Shape.Clockwise ])
+                    |> progressGame (executeUserActions [ Game.Rotate Shape.Clockwise ])
+                    |> repeat 5 (executeUserActions [ Game.Move Game.Right ])
+                    |> progressGame (executeUserActions [ Game.Rotate Shape.Clockwise ])
                     |> expectGame
                         (ExpectedGame
                             { game = buildAsciiGame BottomPadding """
@@ -398,6 +398,11 @@ withInitialShape initialShape shapes =
 timerDrop : Game (List Shape) -> Game.MoveResult (List Shape)
 timerDrop =
     Game.timerDrop getNextShape
+
+
+executeUserActions : List Game.UserAction -> Game (List Shape) -> Game.MoveResult (List Shape)
+executeUserActions actions =
+    Game.executeUserActions getNextShape actions
 
 
 {-| Progresses the game by executing some function that returns a `MoveResult` (e.g. `Game.timerDrop` or
