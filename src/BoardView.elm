@@ -24,21 +24,25 @@ import TypedSvg.Types as SvgT
   - `rowCount`: The number of rows in the board.
   - `colCount`: The number of columns in the board.
   - `borderStyle`: The type of border to put around the board.
+  - `showGridLines`: Whether to show grid lines or not. Generally true (e.g. for a game), but false when for example
+    showing a preview of the upcoming shape next to the actual game board.
 
 -}
 type alias Config =
-    { cellSize : Int, rowCount : Int, colCount : Int, borderStyle : BorderStyle }
+    { cellSize : Int, rowCount : Int, colCount : Int, borderStyle : BorderStyle, showGridLines : Bool }
 
 
 {-| Defines the style of the border to be applied to the board:
 
   - `Solid`: renders a solid line around the board. Used for a normal game.
   - `Fade`: fades the edges of the board out into the supplied colour. Used in the welcome screen.
+  - `None`: no border is shown (e.g. when showing a preview of the upcoming shape next to the actual game board).
 
 -}
 type BorderStyle
     = Solid
     | Fade Element.Color
+    | None
 
 
 {-| Describes a block to be rendered, namely its coordinates on the board, its colour, and its opacity.
@@ -50,7 +54,7 @@ type alias BlockViewInfo =
 {-| Renders the current state of the board into an HTML element, using SVG.
 -}
 view : Config -> List BlockViewInfo -> Maybe HighlightAnimation.Model -> Element msg
-view ({ borderStyle } as config) normalBlocks highlightAnimation =
+view ({ borderStyle, showGridLines } as config) normalBlocks highlightAnimation =
     let
         ( overlay, borderAttrs ) =
             case borderStyle of
@@ -65,6 +69,9 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                 Fade colourToFadeTo ->
                     ( fadeEdgesOverlay <| elmUIColourToColour colourToFadeTo, [] )
 
+                None ->
+                    ( [], [] )
+
         background =
             Svg.rect
                 [ SvgA.width <| SvgT.percent 100
@@ -75,10 +82,7 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
                 ]
                 []
 
-        normalBlocksSvg =
-            drawBlocks config identity normalBlocks
-
-        highlightedBlocksSvg =
+        highlightedBlocks =
             case highlightAnimation of
                 Just animation ->
                     HighlightAnimation.animatedBlocks animation
@@ -87,15 +91,22 @@ view ({ borderStyle } as config) normalBlocks highlightAnimation =
 
                 Nothing ->
                     []
+
+        gridSvg =
+            if showGridLines then
+                grid config
+
+            else
+                []
     in
     Element.el borderAttrs
         (Element.html <|
             svg
                 [ SvgA.width <| boardSizeX config, SvgA.height <| boardSizeY config ]
                 ([ blockSvgDefs config.cellSize, background ]
-                    ++ grid config
-                    ++ normalBlocksSvg
-                    ++ highlightedBlocksSvg
+                    ++ gridSvg
+                    ++ drawBlocks config identity normalBlocks
+                    ++ highlightedBlocks
                     ++ overlay
                 )
         )

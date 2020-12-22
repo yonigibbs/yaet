@@ -373,7 +373,12 @@ button caption msg =
 -}
 boardViewConfig : BoardView.Config
 boardViewConfig =
-    { cellSize = 15, rowCount = 15, colCount = 80, borderStyle = BoardView.Fade UIHelpers.mainBackgroundColour }
+    { cellSize = 15
+    , rowCount = 15
+    , colCount = 80
+    , borderStyle = BoardView.Fade UIHelpers.mainBackgroundColour
+    , showGridLines = True
+    }
 
 
 {-| Converts the list of letters to the list of blocks to use to render them on the board.

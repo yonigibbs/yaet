@@ -86,11 +86,7 @@ shapeCoords orientation shapeType =
 -}
 expectEquals : ExpectedShape -> Shape -> Expectation
 expectEquals (ExpectedShape expectedBlocks) actual =
-    let
-        { colour, blocks } =
-            Shape.data actual
-    in
-    List.sort blocks |> Expect.equal expectedBlocks
+    Shape.data actual |> .blocks |> List.sort |> Expect.equal expectedBlocks
 
 
 toAsciiShape : Orientation -> AsciiShapeTemplate -> String

@@ -9,6 +9,7 @@ module Game exposing
     , new
     , onRowRemovalAnimationComplete
     , timerDrop
+    , upcomingShape
     )
 
 {-| This module has the model and logic for a game. It's responsible for responding to requests (typically originating
@@ -459,3 +460,10 @@ blocks (Game { board, state }) =
                         |> List.partition (\( ( _, cellRowIndex ), _ ) -> List.member cellRowIndex completedRowIndexes)
             in
             { normal = normalCells, highlighted = completedRowCells }
+
+
+{-| Gets the upcoming shape in the game.
+-}
+upcomingShape : Game shapeBuffer -> Shape
+upcomingShape (Game game) =
+    game.nextShape

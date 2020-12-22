@@ -6,6 +6,7 @@ module Shape exposing
     , ShapeData
     , allColours
     , allShapes
+    , clippedBlocks
     , createShapeBag
     , data
     , next
@@ -227,6 +228,30 @@ rotate direction (Shape shapeData) =
                     \( x, y ) -> ( shapeData.gridSize - 1 - y, x )
     in
     Shape { shapeData | blocks = List.map calcCoords shapeData.blocks }
+
+
+{-| Gets a "clipped" version of the supplied shape, i.e. the blocks of the shape, with all empty space around them
+removed. For example the straight line shape is normally horizontal on the 3rd line of a 4x4 grid: this would return a
+4x1 grid with just the line itself. This is used in situations where the shape needs to be rendered without a surrounding
+grid, e.g. in the preview of the upcoming shape.
+-}
+clippedBlocks : Shape -> List Coord
+clippedBlocks (Shape { blocks }) =
+    let
+        calcMin current new =
+            if current == -1 then
+                new
+
+            else
+                min current new
+
+        ( minX, minY ) =
+            blocks
+                |> List.foldl
+                    (\( blockX, blockY ) ( accMinX, accMinY ) -> ( calcMin accMinX blockX, calcMin accMinY blockY ))
+                    ( -1, -1 )
+    in
+    blocks |> List.map (\( x, y ) -> ( x - minX, y - minY ))
 
 
 

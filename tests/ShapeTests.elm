@@ -1,5 +1,7 @@
 module ShapeTests exposing (suite)
 
+import Coord exposing (Coord)
+import Expect
 import Shape exposing (Shape)
 import ShapeUtils
 import Test exposing (..)
@@ -18,6 +20,20 @@ suite =
                 , allRotationTests "Straight-line" ShapeUtils.Line
                 , allRotationTests "Square" ShapeUtils.Square
                 ]
+        , describe "clippedBlocks" <|
+            [ clippedBlocksTest "Straight-line"
+                (ShapeUtils.getShape ShapeUtils.Line)
+                [ ( 0, 0 ), ( 1, 0 ), ( 2, 0 ), ( 3, 0 ) ]
+            , clippedBlocksTest "Straight-line (rotated clockwise once)"
+                (ShapeUtils.getShape ShapeUtils.Line |> rotateXTimes Shape.Clockwise 1)
+                [ ( 0, 0 ), ( 0, 1 ), ( 0, 2 ), ( 0, 3 ) ]
+            , clippedBlocksTest "L-shape"
+                (ShapeUtils.getShape ShapeUtils.Ell)
+                [ ( 0, 0 ), ( 1, 0 ), ( 2, 0 ), ( 2, 1 ) ]
+            , clippedBlocksTest "Square"
+                (ShapeUtils.getShape ShapeUtils.Square)
+                [ ( 0, 0 ), ( 1, 0 ), ( 0, 1 ), ( 1, 1 ) ]
+            ]
         ]
 
 
@@ -50,3 +66,13 @@ rotationTest testDescr shapeType direction turns expectedOrientation =
 rotateXTimes : Shape.RotationDirection -> Int -> Shape -> Shape
 rotateXTimes direction turns shape =
     List.range 1 turns |> List.foldl (\_ shape_ -> Shape.rotate direction shape_) shape
+
+
+clippedBlocksTest : String -> Shape -> List Coord -> Test
+clippedBlocksTest testDescr shape expectedBlocks =
+    test testDescr <|
+        \_ ->
+            shape
+                |> Shape.clippedBlocks
+                |> List.sort
+                |> Expect.equal (List.sort expectedBlocks)

@@ -11,6 +11,9 @@ the board and other related items such as a Pause button, etc.
 import BoardView
 import Coord exposing (Coord)
 import Element exposing (Element)
+import Element.Background
+import Element.Border
+import Element.Font
 import Game exposing (Game)
 import GameBoard
 import HighlightAnimation
@@ -377,24 +380,97 @@ handleAnimationMsg model msg =
 view : Model -> Element msg
 view model =
     let
-        boardView =
+        screenSection content =
+            Element.el [ Element.width <| Element.px 400, Element.alignTop ] content
+
+        ( gameBlocks, animationModel ) =
             case model of
                 Initialising ->
-                    BoardView.view boardViewConfig [] Nothing
+                    ( [], Nothing )
 
-                Playing { normalBlocks, highlightAnimation } ->
-                    BoardView.view boardViewConfig
-                        (BoardView.withOpacity 1 normalBlocks)
-                        highlightAnimation
+                Playing { normalBlocks, highlightAnimation, game } ->
+                    ( BoardView.withOpacity 1 normalBlocks, highlightAnimation )
     in
-    Element.column [] [ boardView ]
+    Element.row [] <|
+        -- TODO: show scores in this first section
+        [ screenSection <| Element.text ""
+        , screenSection <| Element.el [ Element.centerX ] <| BoardView.view boardViewConfig gameBlocks animationModel
+        , screenSection <| upcomingShapeView model
+        ]
+
+
+{-| Gets a view showing the upcoming shape in the game.
+-}
+upcomingShapeView : Model -> Element msg
+upcomingShapeView model =
+    let
+        { rowCount, colCount, blocks } =
+            case model of
+                Initialising ->
+                    -- We don't have an upcoming shape yet so render an empty board
+                    { rowCount = 0, colCount = 0, blocks = [] }
+
+                Playing { game } ->
+                    upcomingShapeBlocks game
+    in
+    Element.column
+        [ Element.padding 14
+        , Element.spacing 20
+        , Element.Background.color <| Element.rgb255 0 0 0
+        , Element.height <| Element.px 140
+        , Element.Border.color <| Element.rgb255 100 100 100
+        , Element.Border.width 2
+        , Element.Border.glow (Element.rgb255 200 200 200) 0.1
+        ]
+        [ Element.el [ Element.centerX, Element.Font.color <| Element.rgb255 100 100 100 ] <| Element.text "Coming next..."
+        , Element.el [ Element.centerX, Element.centerY, Element.centerX ] <|
+            BoardView.view
+                { cellSize = cellSize, rowCount = rowCount, colCount = colCount, borderStyle = BoardView.None, showGridLines = False }
+                blocks
+                Nothing
+        ]
+
+
+{-| Gets the data about the upcoming shape required for rendering in a preview of the upcoming shape.
+-}
+upcomingShapeBlocks : Game shapeBuffer -> { rowCount : Int, colCount : Int, blocks : List BoardView.BlockViewInfo }
+upcomingShapeBlocks game =
+    let
+        upcomingShape =
+            Game.upcomingShape game
+
+        blocks =
+            Shape.clippedBlocks upcomingShape
+
+        rowCount =
+            blocks |> List.map Tuple.second |> List.maximum |> Maybe.withDefault 0 |> (+) 1
+
+        colCount =
+            blocks |> List.map Tuple.first |> List.maximum |> Maybe.withDefault 0 |> (+) 1
+    in
+    { rowCount = rowCount
+    , colCount = colCount
+    , blocks = blocks |> List.map (\coord -> { coord = coord, colour = Shape.data upcomingShape |> .colour, opacity = 1 })
+    }
 
 
 {-| The configuration required to render the game.
 -}
 boardViewConfig : BoardView.Config
 boardViewConfig =
-    { cellSize = 30, rowCount = GameBoard.rowCount, colCount = GameBoard.colCount, borderStyle = BoardView.Solid }
+    { cellSize = cellSize
+    , rowCount = GameBoard.rowCount
+    , colCount = GameBoard.colCount
+    , borderStyle = BoardView.Solid
+    , showGridLines = True
+    }
+
+
+{-| The size of the cells in a normal game.
+-}
+cellSize : Int
+cellSize =
+    30
 
 
 
