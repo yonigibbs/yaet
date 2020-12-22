@@ -8,6 +8,7 @@ module Game exposing
     , executeUserActions
     , new
     , onRowRemovalAnimationComplete
+    , previewLandingBlocks
     , timerDrop
     , upcomingShape
     )
@@ -467,3 +468,47 @@ blocks (Game { board, state }) =
 upcomingShape : Game shapeBuffer -> Shape
 upcomingShape (Game game) =
     game.nextShape
+
+
+{-| Gets an array of blocks which show where the currently dropping shape would land, were it to land right now (i.e. not
+be moved left or right before it lands). Returns an empty list if a preview is not required (e.g. if the currently
+dropping shape is already at its lowest possible position).
+-}
+previewLandingBlocks : Game shapeBuffer -> List ( Coord, Shape.BlockColour )
+previewLandingBlocks (Game { board, state }) =
+    case state of
+        RegularGameState { droppingShape } ->
+            let
+                { colour } =
+                    Shape.data droppingShape.shape
+
+                landingShape : DroppingShape
+                landingShape =
+                    calcLandingPos board droppingShape
+            in
+            -- If shape is already where it would be, were it to land, we don't have a preview
+            if landingShape.gridCoord == droppingShape.gridCoord then
+                []
+
+            else
+                DroppingShape.calcShapeBlocksBoardCoords landingShape |> BoardView.withColour colour
+
+        RowRemovalGameState { completedRowIndexes } ->
+            -- We don't have a currently dropping shape so can't preview where it would land.
+            []
+
+
+{-| Gets a `DroppingShape` representing the supplied shape, at its lowest possible position (i.e. where it would land
+if it weren't to be moved).
+-}
+calcLandingPos : GameBoard -> DroppingShape -> DroppingShape
+calcLandingPos board droppingShape =
+    let
+        proposedDroppingShape =
+            { droppingShape | gridCoord = nextCoord Down droppingShape.gridCoord }
+    in
+    if isValidPosition board proposedDroppingShape then
+        calcLandingPos board proposedDroppingShape
+
+    else
+        droppingShape

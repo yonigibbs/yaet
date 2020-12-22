@@ -51,6 +51,9 @@ type Model
     calculation to convert its own internal representation of the game's state to that required for rendering it, and we
     don't want that calculation to run multiple times a second when rendering animations, so we store it here. It's
     important that whenever `game` is updated with potentially new blocks, this field is correspondingly updated.
+  - `previewLandingBlocks`: The blocks of the currently dropping shape, were it to land immediately now. This is shown
+    to the user to let them see where the shape will land. Like `normalBlocks` this can be calculated at runtime from the
+    `game`, but for performance reasons we cache it.
   - `highlightAnimation`: If any blocks are currently highlighted (e.g. because a shape is about to land) this contains
     the animation used to provide that highlighting. As for `normalBlocks`, this information can be calculated from the
     game, but for performance reasons is stored in the model.
@@ -65,6 +68,7 @@ type alias PlayingModel =
     , timerDropDelay : Int
     , timerDropMessageId : Int
     , normalBlocks : List ( Coord, Shape.BlockColour )
+    , previewLandingBlocks : List ( Coord, Shape.BlockColour )
     , highlightAnimation : Maybe HighlightAnimation.Model
     , nextAnimationId : HighlightAnimation.Id
     , gameControl : UserGameControl.Model
@@ -146,6 +150,7 @@ startNewGame seed =
             , timerDropDelay = 1000 -- TODO: hard-coded 1000 here - configurable? right value?
             , timerDropMessageId = 0
             , normalBlocks = Game.blocks newGame |> .normal
+            , previewLandingBlocks = Game.previewLandingBlocks newGame
             , highlightAnimation = Nothing -- We know initially there is nothing highlighted.
             , nextAnimationId = HighlightAnimation.initialId
             , gameControl = UserGameControl.init
@@ -231,20 +236,20 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
 
         Game.Continue { game } ->
             let
-                playingModel =
-                    { currentPlayingModel | game = game }
-
                 nextBlocks =
                     Game.blocks game
+
+                playingModel =
+                    { currentPlayingModel
+                        | game = game
+                        , normalBlocks = nextBlocks.normal
+                        , previewLandingBlocks = Game.previewLandingBlocks game
+                    }
             in
             case nextBlocks.highlighted of
                 [] ->
                     -- No animation required as there are no highlighted blocks
-                    Continue
-                        ( Playing
-                            { playingModel | game = playingModel.game, normalBlocks = nextBlocks.normal, highlightAnimation = Nothing }
-                        , updateResultCmd
-                        )
+                    Continue ( Playing { playingModel | highlightAnimation = Nothing }, updateResultCmd )
 
                 _ ->
                     -- There are some blocks we need to animate, but this animation might already be in progress (e.g.
@@ -253,7 +258,7 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
                     case playingModel.highlightAnimation of
                         Nothing ->
                             Continue
-                                ( startNewAnimation playingModel nextBlocks HighlightAnimation.ShapeLanding
+                                ( playingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.ShapeLanding |> Playing
                                 , updateResultCmd
                                 )
 
@@ -263,28 +268,34 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
                                 Continue
                                     ( Playing
                                         { playingModel
-                                            | game = playingModel.game
-                                            , normalBlocks = nextBlocks.normal
-                                            , highlightAnimation =
+                                            | highlightAnimation =
                                                 Just <| HighlightAnimation.withBlocks nextBlocks.highlighted currentAnimation
                                         }
                                     , updateResultCmd
                                     )
 
                             else
+                                -- Start a new animation
                                 Continue
-                                    ( startNewAnimation playingModel nextBlocks HighlightAnimation.ShapeLanding
+                                    ( playingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.ShapeLanding |> Playing
                                     , updateResultCmd
                                     )
 
         Game.RowBeingRemoved { game } ->
             let
+                nextBlocks =
+                    Game.blocks game
+
                 playingModel =
-                    { currentPlayingModel | game = game }
+                    { currentPlayingModel
+                        | game = game
+                        , normalBlocks = nextBlocks.normal
+                        , previewLandingBlocks = Game.previewLandingBlocks game
+                    }
             in
             -- Don't call updateResultCmd here - if a row is being removed we _don't_ want a timer drop delay to start yet.
             Continue
-                ( startNewAnimation playingModel (Game.blocks game) HighlightAnimation.RowRemoval
+                ( playingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.RowRemoval |> Playing
                 , Cmd.none
                 )
 
@@ -294,22 +305,20 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
 
 {-| Starts a new animation.
 -}
-startNewAnimation : PlayingModel -> Game.GameBlockInfo -> HighlightAnimation.Type -> Model
-startNewAnimation currentPlayingModel blocks animationType =
+withNewAnimation : List ( Coord, Shape.BlockColour ) -> HighlightAnimation.Type -> PlayingModel -> PlayingModel
+withNewAnimation highlightedBlocks animationType playingModel =
     let
         animationModel =
             HighlightAnimation.startNewAnimation
-                currentPlayingModel.nextAnimationId
+                playingModel.nextAnimationId
                 animationType
-                (totalAnimationTimeForType animationType currentPlayingModel)
-                blocks.highlighted
+                (totalAnimationTimeForType animationType playingModel)
+                highlightedBlocks
     in
-    Playing
-        { currentPlayingModel
-            | normalBlocks = blocks.normal
-            , nextAnimationId = HighlightAnimation.nextAnimationId currentPlayingModel.nextAnimationId
-            , highlightAnimation = Just animationModel
-        }
+    { playingModel
+        | nextAnimationId = HighlightAnimation.nextAnimationId playingModel.nextAnimationId
+        , highlightAnimation = Just animationModel
+    }
 
 
 {-| Calculates the total time use for an animation of the given type.
@@ -383,18 +392,20 @@ view model =
         screenSection content =
             Element.el [ Element.width <| Element.px 400, Element.alignTop ] content
 
-        ( gameBlocks, animationModel ) =
+        ( gameBlocks, gamePreviewLandingBlocks, animationModel ) =
             case model of
                 Initialising ->
-                    ( [], Nothing )
+                    ( [], [], Nothing )
 
-                Playing { normalBlocks, highlightAnimation, game } ->
-                    ( BoardView.withOpacity 1 normalBlocks, highlightAnimation )
+                Playing { normalBlocks, previewLandingBlocks, highlightAnimation, game } ->
+                    ( BoardView.withOpacity 1 normalBlocks, previewLandingBlocks, highlightAnimation )
     in
     Element.row [] <|
         -- TODO: show scores in this first section
         [ screenSection <| Element.text ""
-        , screenSection <| Element.el [ Element.centerX ] <| BoardView.view boardViewConfig gameBlocks animationModel
+        , screenSection <|
+            Element.el [ Element.centerX ] <|
+                BoardView.view boardViewConfig gameBlocks gamePreviewLandingBlocks animationModel
         , screenSection <| upcomingShapeView model
         ]
 
@@ -411,6 +422,8 @@ upcomingShapeView model =
                     { rowCount = 0, colCount = 0, blocks = [] }
 
                 Playing { game } ->
+                    -- TODO: we calculate this every time this is rendered - should we cache it like we do the game
+                    -- blocks so it doesn't have to be recalculated multiple times (esp during an animation)?
                     upcomingShapeBlocks game
     in
     Element.column
@@ -427,6 +440,7 @@ upcomingShapeView model =
             BoardView.view
                 { cellSize = cellSize, rowCount = rowCount, colCount = colCount, borderStyle = BoardView.None, showGridLines = False }
                 blocks
+                []
                 Nothing
         ]
 

@@ -45,16 +45,37 @@ type BorderStyle
     | None
 
 
-{-| Describes a block to be rendered, namely its coordinates on the board, its colour, and its opacity.
+{-| Describes a normal block to be rendered, namely its coordinates on the board, its colour, and its opacity.
 -}
 type alias BlockViewInfo =
     { coord : Coord, colour : Shape.BlockColour, opacity : Float }
 
 
-{-| Renders the current state of the board into an HTML element, using SVG.
+{-| Describes how a block should be filled in.
+
+  - `Filled`: a normal block, filled in in a given colour, with the opacity supplied here.
+  - `Unfilled`: a block used to show a preview of where a landing should would eventually land, shown unfilled.
+
 -}
-view : Config -> List BlockViewInfo -> Maybe HighlightAnimation.Model -> Element msg
-view ({ borderStyle, showGridLines } as config) normalBlocks highlightAnimation =
+type BlockFillType
+    = Filled Float
+    | Unfilled
+
+
+{-| Renders the current state of the board into an HTML element, using SVG. Parameters:
+
+  - `config`: configuration information required to render the board (e.g. the sizes, etc).
+  - `normalBlocks`: the normal blocks (e.g. the landed blocks, but the blocks of the currently dropping shape, if it's
+    not to be animated at the moment).
+  - `previewLandingBlocks`: the coordinates and colour of the blocks of the currently dropping shape in the position
+    where it would land if it were not to be moved left or right. These are shown as not-filled-in.
+  - `highlightAnimation`: if an animation is currently ongoing (e.g. for a shape which has just landed, or for rows
+    being removed) this should describe the animation (e.g. the type of animation, its current progress, and the blocks
+    in it).
+
+-}
+view : Config -> List BlockViewInfo -> List ( Coord, Shape.BlockColour ) -> Maybe HighlightAnimation.Model -> Element msg
+view ({ borderStyle, showGridLines } as config) normalBlocks previewLandingBlocks highlightAnimation =
     let
         ( overlay, borderAttrs ) =
             case borderStyle of
@@ -87,6 +108,7 @@ view ({ borderStyle, showGridLines } as config) normalBlocks highlightAnimation 
                 Just animation ->
                     HighlightAnimation.animatedBlocks animation
                         |> withOpacity (HighlightAnimation.animatedOpacity animation)
+                        |> asFilled
                         |> drawBlocks config (HighlightAnimation.animatedColour animation)
 
                 Nothing ->
@@ -105,7 +127,8 @@ view ({ borderStyle, showGridLines } as config) normalBlocks highlightAnimation 
                 [ SvgA.width <| boardSizeX config, SvgA.height <| boardSizeY config ]
                 ([ blockSvgDefs config.cellSize, background ]
                     ++ gridSvg
-                    ++ drawBlocks config identity normalBlocks
+                    ++ drawBlocks config identity (asUnfilled previewLandingBlocks)
+                    ++ drawBlocks config identity (asFilled normalBlocks)
                     ++ highlightedBlocks
                     ++ overlay
                 )
@@ -118,6 +141,22 @@ opacity on each one (and converting the tuples to records).
 withOpacity : Float -> List ( Coord, Shape.BlockColour ) -> List BlockViewInfo
 withOpacity opacity blocks =
     blocks |> List.map (\( coord, colour ) -> { coord = coord, colour = colour, opacity = opacity })
+
+
+{-| Converts the passed in list of `BlockViewInfo` records to a list of records in the format required by the
+`drawBlocks` function, setting their `fillType` to `Filled`, with the given opacity.
+-}
+asFilled : List BlockViewInfo -> List { coord : Coord, colour : Shape.BlockColour, fillType : BlockFillType }
+asFilled blocks =
+    blocks |> List.map (\{ coord, colour, opacity } -> { coord = coord, colour = colour, fillType = Filled opacity })
+
+
+{-| Converts the passed in list of `BlockViewInfo` records to a list of records in the format required by the
+`drawBlocks` function, setting their `fillType` to `Unfilled`.
+-}
+asUnfilled : List ( Coord, Shape.BlockColour ) -> List { coord : Coord, colour : Shape.BlockColour, fillType : BlockFillType }
+asUnfilled blocks =
+    blocks |> List.map (\( coord, colour ) -> { coord = coord, colour = colour, fillType = Unfilled })
 
 
 {-| Converts a list of coordinates to a tuple containing the coordinates and the given colour.
@@ -156,31 +195,32 @@ fadeEdgesOverlay colourToFadeTo =
 {-| Draws the supplied blocks using the given functions to get the actual colours to apply to each one. `colourConverter`
 is a function which is used to take the block's default colour and transform it (e.g. during an animation).
 -}
-drawBlocks : Config -> (Color -> Color) -> List BlockViewInfo -> List (Svg msg)
+drawBlocks : Config -> (Color -> Color) -> List { coord : Coord, colour : Shape.BlockColour, fillType : BlockFillType } -> List (Svg msg)
 drawBlocks config colourConverter blocks =
     blocks
         |> List.map
-            (\{ coord, colour, opacity } -> drawBlock config coord opacity (blockColour colour |> colourConverter))
+            (\{ coord, colour, fillType } -> drawBlock config coord fillType (blockColour colour |> colourConverter))
 
 
 {-| Draws a block at the given coordinate, and of the given colour.
 -}
-drawBlock : Config -> Coord -> Float -> Color -> Svg msg
-drawBlock config coord opacity colour =
+drawBlock : Config -> Coord -> BlockFillType -> Color -> Svg msg
+drawBlock config coord fillType colour =
     let
         ( x1, y1 ) =
             coordToGridPos config coord
                 |> Tuple.mapBoth ((+) 1) ((+) 1)
                 |> Tuple.mapBoth toFloat toFloat
+
+        fillTypeAttrs =
+            case fillType of
+                Filled opacity ->
+                    [ SvgA.fill <| SvgT.Paint colour, SvgA.opacity <| SvgT.Opacity opacity ]
+
+                Unfilled ->
+                    [ SvgA.stroke <| SvgT.Paint colour, SvgA.opacity <| SvgT.Opacity 0.6 ]
     in
-    Svg.use
-        [ SvgA.xlinkHref "#block"
-        , SvgA.x <| SvgT.px x1
-        , SvgA.y <| SvgT.px y1
-        , SvgA.fill <| SvgT.Paint colour
-        , SvgA.opacity <| SvgT.Opacity opacity
-        ]
-        []
+    Svg.use ([ SvgA.xlinkHref "#block", SvgA.x <| SvgT.px x1, SvgA.y <| SvgT.px y1 ] ++ fillTypeAttrs) []
 
 
 {-| Gets the SVG `defs` which is referred to by every block. Defines the way that a block is rendered.

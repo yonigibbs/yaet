@@ -32,12 +32,12 @@ Current state: **WIP.**
 - [x] Constantly rotating when at the lowest possible position restarts the timer drop so user can stop the game from
       progressing at all by just holding down the rotate key.
 - [x] Improve playability wrt long holds of buttons
-- [ ] Add more unit tests for the above
 - [x] Fix issue where if two empty rows available and user pressing the down arrow, the new shape appears then
       disappears briefly just before Game Over appears. 
+- [x] Show upcoming piece
+- [x] Show where currently dropping shape would land
 - [ ] Add key binding for dropping current piece immediately (space bar?)
 - [ ] Add ability to pause game
-- [ ] Show upcoming pieces
 - [ ] Scores
 - [ ] High scores (persisted to local storage)
 - [ ] Settings/preferences, e.g. keyboard bindings (persisted to local storage)
@@ -47,7 +47,6 @@ Current state: **WIP.**
 - [ ] Make UI responsive.
   - [ ] Buttons to use instead of keyboard for phones/tablets?
 - [ ] Improve Game Over animation - drop the "Game Over" message down from top of board (use SVG for this?)
-- [ ] Show where currently dropping shape would land (brighter outline on cells on bottom-most valid rows?)
 - [ ] Use `elm-animator` instead of doing animations manually?
 - [ ] Add smoother transitions (e.g. fade out/in) between welcome screen and game screen
 - [ ] Investigate "Hold" feature in some versions
