@@ -36,6 +36,7 @@ Current state: **WIP.**
       disappears briefly just before Game Over appears. 
 - [x] Show upcoming piece
 - [x] Show where currently dropping shape would land
+- [x] Add "Hold" feature
 - [ ] Add key binding for dropping current piece immediately (space bar?)
 - [ ] Add ability to pause game
 - [ ] Scores
@@ -49,6 +50,5 @@ Current state: **WIP.**
 - [ ] Improve Game Over animation - drop the "Game Over" message down from top of board (use SVG for this?)
 - [ ] Use `elm-animator` instead of doing animations manually?
 - [ ] Add smoother transitions (e.g. fade out/in) between welcome screen and game screen
-- [ ] Investigate "Hold" feature in some versions
 - [ ] Look into probabilities of shapes - should some shapes be more likely than others (e.g. straight line)?
 - [ ] TODOs in the code

@@ -243,31 +243,37 @@ executeUserActions : GetShape shapeBuffer -> List UserAction -> Game shapeBuffer
 executeUserActions getShape actions (Game ({ state, board, holdInfo } as model)) =
     case state of
         RegularGameState { droppingShape } ->
-            -- If attempting a Hold action then only run that single action and ignore the rest.
+            -- The Hold and Drop To Bottom actions are executed by themselves - other actions are ignored.
             if List.any isHoldAction actions then
                 executeHoldAction getShape model droppingShape
 
-            else
-                let
-                    -- If any of the actions is Drop with a DropType of ToBottom then ignore all other actions and just
-                    -- execute that single action.
-                    actionsToExecute =
-                        if List.any isDropToBottomAction actions then
-                            [ DropToBottom ]
+            else if List.any isDropToBottomAction actions then
+                executeDropToBottomAction getShape model droppingShape
 
-                        else
-                            actions
-                in
+            else
                 -- TODO: if the actions are "drop down" and "move left", and the shape is directly on top of another
                 -- it cannot be dropped down, but can be moved left, so that's all that'll happen. But it might be that
                 -- once it's moved left it _can_ now be dropped down. Consider handling this edge case.
                 let
                     -- Execute all the actions, and keep a boolean (anyChanges) which is set to true if any changes were made.
                     ( newDroppingShape, anyChanges ) =
-                        actionsToExecute
+                        actions
                             |> List.foldl
                                 (\action ( accDroppingShape, accAnyChanges ) ->
-                                    case executeUserAction board accDroppingShape action of
+                                    let
+                                        result =
+                                            case action of
+                                                Move direction ->
+                                                    executeMoveAction board accDroppingShape direction
+
+                                                Rotate direction ->
+                                                    executeRotateAction board accDroppingShape direction
+
+                                                _ ->
+                                                    -- These were handled separately above
+                                                    NotAllowed
+                                    in
+                                    case result of
                                         NotAllowed ->
                                             ( accDroppingShape, accAnyChanges )
 
@@ -306,36 +312,33 @@ isDropToBottomAction action =
             False
 
 
-{-| Attempts to execute the supplied user action and returns a result defining whether or not the action was allowed.
--}
-executeUserAction : GameBoard -> DroppingShape -> UserAction -> UserActionResult
-executeUserAction board droppingShape action =
-    case action of
-        Move direction ->
-            let
-                proposedDroppingShape =
-                    { droppingShape | gridCoord = nextCoord direction droppingShape.gridCoord }
-            in
-            if isValidPosition board proposedDroppingShape then
-                Allowed proposedDroppingShape
+executeRotateAction : GameBoard -> DroppingShape -> Shape.RotationDirection -> UserActionResult
+executeRotateAction board droppingShape direction =
+    case nextValidRotatedDroppingShape { droppingShape | shape = Shape.rotate direction droppingShape.shape } board of
+        Just rotatedShape ->
+            Allowed rotatedShape
 
-            else
-                NotAllowed
-
-        DropToBottom ->
-            -- TODO: "Implement dropping shape to bottom"
+        Nothing ->
             NotAllowed
 
-        Rotate direction ->
-            case nextValidRotatedDroppingShape { droppingShape | shape = Shape.rotate direction droppingShape.shape } board of
-                Just rotatedShape ->
-                    Allowed rotatedShape
 
-                Nothing ->
-                    NotAllowed
+executeMoveAction : GameBoard -> DroppingShape -> MoveDirection -> UserActionResult
+executeMoveAction board droppingShape direction =
+    let
+        proposedDroppingShape =
+            { droppingShape | gridCoord = nextCoord direction droppingShape.gridCoord }
+    in
+    if isValidPosition board proposedDroppingShape then
+        Allowed proposedDroppingShape
 
-        Hold ->
-            Debug.todo "Implement hold"
+    else
+        NotAllowed
+
+
+executeDropToBottomAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> MoveResult shapeBuffer
+executeDropToBottomAction getShape model droppingShape =
+    -- TODO: implement
+    NoChange
 
 
 {-| Swaps the currently dropping shape with the shape previously put into hold (if there is one) or the next dropping

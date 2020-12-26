@@ -424,7 +424,7 @@ upcomingShapeView model =
                 Playing { game } ->
                     Just <| Game.upcomingShape game
     in
-    shapePreview "Coming next..." upcomingShape
+    shapePreview Element.alignLeft "Coming next..." upcomingShape
 
 
 {-| Gets a view showing the upcoming shape in the game.
@@ -440,13 +440,13 @@ holdShapeView model =
                 Playing { game } ->
                     Game.holdShape game
     in
-    shapePreview "Hold" holdShape
+    shapePreview Element.alignRight "Hold" holdShape
 
 
 {-| Gets a rectangle showing a preview of a shape (e.g. the next shape to drop, or the shape currently on hold).
 -}
-shapePreview : String -> Maybe Shape -> Element msg
-shapePreview caption maybeShape =
+shapePreview : Element.Attribute msg -> String -> Maybe Shape -> Element msg
+shapePreview align caption maybeShape =
     let
         blocks =
             case maybeShape of
@@ -470,7 +470,9 @@ shapePreview caption maybeShape =
         , Element.width <| Element.px 180
         , Element.Border.color <| Element.rgb255 100 100 100
         , Element.Border.width 2
-        , Element.Border.glow (Element.rgb255 200 200 200) 0.1
+        , Element.Border.rounded 20
+        , Element.Border.glow (Element.rgb255 200 200 200) 0.2
+        , align
         ]
         [ Element.el [ Element.centerX, Element.Font.color <| Element.rgb255 100 100 100, Element.Font.semiBold ] <|
             Element.text caption
