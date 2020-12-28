@@ -178,33 +178,38 @@ handleGameControlMsg playingModel gameControlMsg =
         moveResult =
             Game.executeUserActions Shape.next actionsToExecute playingModel.game
 
-        -- If a shape was dropped then reset the timer drop delay
-        startNewTimerDropDelay =
+        -- If a shape was dropped then reset the timer drop delay. Additionally, decide whether to ignore any future
+        -- timer drop messages that were previously initiated (but haven't arrived yet).
+        ( startNewTimerDropDelay, ignoreInFlightTimerDropMessages ) =
             case moveResult of
-                Game.Continue { shapeRowChanged } ->
-                    shapeRowChanged
+                Game.NoChange ->
+                    ( False, False )
 
-                _ ->
-                    -- If there was no change, or if the game is no in `RowBeingRemoved` state (i.e. we're "flashing"
-                    -- the row(s) about to be removed) then we don't want/need a timer drop delay.
-                    False
+                Game.Continue { resetTimerDrop } ->
+                    ( resetTimerDrop, resetTimerDrop )
+
+                Game.RowBeingRemoved _ ->
+                    ( False, True )
+
+                Game.GameOver _ ->
+                    ( False, True )
 
         -- If we're starting a new timer drop delay the increment the `timerDropMessageId` so that when the current
         -- `Process.sleep` eventually returns we'll know to ignore it.
         newTimerDropSubscriptionId =
-            if startNewTimerDropDelay then
+            if ignoreInFlightTimerDropMessages then
                 playingModel.timerDropMessageId + 1
 
             else
                 playingModel.timerDropMessageId
     in
-    moveResult
-        |> handleMoveResult
-            { playingModel
-                | gameControl = nextGameControlModel
-                , timerDropMessageId = newTimerDropSubscriptionId
-            }
-            startNewTimerDropDelay
+    handleMoveResult
+        { playingModel
+            | gameControl = nextGameControlModel
+            , timerDropMessageId = newTimerDropSubscriptionId
+        }
+        startNewTimerDropDelay
+        moveResult
 
 
 {-| Gets the command which will sleep for `timerDropDelay` ms then cause the `TimerDropDelayElapsed` message to be invoked.

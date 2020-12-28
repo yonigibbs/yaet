@@ -193,13 +193,8 @@ type UserActionResult
     go on the board). The game's model hasn't changed as a result of this attempt.
   - `Continue`: the game should continue as normal. The variant contains the following data:
       - `game`: The updated game.
-      - `shapeRowChanged`: Boolean flag indicated whether the currently dropping shape is now on a different row. If so
-        then the timer set up to automatically drop a shape every so often should be reset, typically because now the
-        user has done this manually (or they used the Hold feature). This is also set to true when the user uses the Drop
-        To Bottom action. Typically this _will_ have changed a shape's row, but not always: the shape might have been on
-        the bottom row already (awaiting the next timer drop) when the user executed this action. In that case, although
-        it's not strictly speaking changed row, it can still be treated as such, as the action will have caused the next
-        shape to start dropping, so conceptually it's like the shape has "dropped" to a landing state.
+      - `resetTimerDrop`: Boolean flag indicated whether the timer set up to automatically drop a shape every so often
+        should be reset, typically because the user has manually done something to intervene, e.g. dropped a shape.
   - `RowBeingRemoved`: one or more rows are being removed. This means that the parent module should now animate any
     highlighted blocks with the animation used for rows being removed (a "flash" effect). When that animation is
     complete, it should call `onRowRemovalAnimationComplete` again, which will remove those rows and drop all the other
@@ -211,7 +206,7 @@ See comments on this module for an explanation of the `shapeBuffer` type paramet
 -}
 type MoveResult shapeBuffer
     = NoChange
-    | Continue { game : Game shapeBuffer, shapeRowChanged : Bool }
+    | Continue { game : Game shapeBuffer, resetTimerDrop : Bool }
     | RowBeingRemoved { game : Game shapeBuffer }
     | GameOver { game : Game shapeBuffer }
 
@@ -230,11 +225,11 @@ timerDrop getShape (Game ({ state, board } as model)) =
             in
             if isValidPosition board proposedDroppingShape then
                 -- It's valid for the currently dropping shape to go down by one row, so just do that.
-                continueWithUpdatedDroppingShape droppingShape proposedDroppingShape model
+                continueWithUpdatedDroppingShape proposedDroppingShape False model
 
             else
                 -- It's not valid for the currently dropping shape to go down by one row, so it must have landed.
-                handleDroppingShapeLanded getShape droppingShape model
+                handleDroppingShapeLanded getShape droppingShape False model
 
         RowRemovalGameState _ ->
             NoChange
@@ -244,7 +239,7 @@ timerDrop getShape (Game ({ state, board } as model)) =
 being held down).
 -}
 executeUserActions : GetShape shapeBuffer -> List UserAction -> Game shapeBuffer -> MoveResult shapeBuffer
-executeUserActions getShape actions ((Game ({ state, board, holdInfo } as model)) as game) =
+executeUserActions getShape actions (Game ({ state, board, holdInfo } as model)) =
     case state of
         RegularGameState { droppingShape } ->
             -- The Hold and Drop To Bottom actions are executed by themselves - other actions are ignored.
@@ -285,9 +280,13 @@ executeUserActions getShape actions ((Game ({ state, board, holdInfo } as model)
                                             ( updatedDroppingShape, True )
                                 )
                                 ( droppingShape, False )
+
+                    -- Reset the timer drop if the shape has moved down a row.
+                    resetTimerDrop =
+                        isOnDifferentRow droppingShape newDroppingShape
                 in
                 if anyChanges then
-                    continueWithUpdatedDroppingShape droppingShape newDroppingShape model
+                    continueWithUpdatedDroppingShape newDroppingShape resetTimerDrop model
 
                 else
                     NoChange
@@ -341,7 +340,7 @@ executeMoveAction board droppingShape direction =
 
 executeDropToBottomAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> MoveResult shapeBuffer
 executeDropToBottomAction getShape model droppingShape =
-    handleDroppingShapeLanded getShape (calcLandingPos model.board droppingShape) model
+    handleDroppingShapeLanded getShape (calcLandingPos model.board droppingShape) True model
 
 
 {-| Swaps the currently dropping shape with the shape previously put into hold (if there is one) or the next dropping
@@ -372,7 +371,7 @@ executeHoldAction getShape ({ board, holdInfo, nextShape } as model) currentDrop
                     }
                         |> buildModel
             in
-            Continue { game = Game newModel, shapeRowChanged = True }
+            Continue { game = Game newModel, resetTimerDrop = True }
 
         else
             NoChange
@@ -410,8 +409,8 @@ nextValidRotatedDroppingShape droppingShape board =
 {-| Handles the case when the dropping shape has landed: appends its blocks to the board and takes the next item off the
 buffer to be the new "next" shape.
 -}
-handleDroppingShapeLanded : GetShape shapeBuffer -> DroppingShape -> Model shapeBuffer -> MoveResult shapeBuffer
-handleDroppingShapeLanded getShape droppingShape ({ state, board, nextShape } as model) =
+handleDroppingShapeLanded : GetShape shapeBuffer -> DroppingShape -> Bool -> Model shapeBuffer -> MoveResult shapeBuffer
+handleDroppingShapeLanded getShape droppingShape resetTimerDrop ({ state, board, nextShape } as model) =
     let
         { colour } =
             Shape.data droppingShape.shape
@@ -430,7 +429,7 @@ handleDroppingShapeLanded getShape droppingShape ({ state, board, nextShape } as
             -- No completed rows - continue as normal, but only if the new dropping shape is valid at its
             -- proposed position: if not, the game is over.
             if isValidPosition nextBoard newDroppingShape then
-                continueWithUpdatedDroppingShape droppingShape newDroppingShape nextModel
+                continueWithUpdatedDroppingShape newDroppingShape resetTimerDrop nextModel
 
             else
                 GameOver { game = Game { model | board = nextBoard } }
@@ -478,16 +477,17 @@ withAllowHoldSwap model =
             model
 
 
-continueWithUpdatedDroppingShape : DroppingShape -> DroppingShape -> Model shapeBuffer -> MoveResult shapeBuffer
-continueWithUpdatedDroppingShape orgDroppingShape newDroppingShape model =
-    let
-        shapedDropped =
-            Tuple.second orgDroppingShape.gridCoord /= Tuple.second newDroppingShape.gridCoord
-    in
+continueWithUpdatedDroppingShape : DroppingShape -> Bool -> Model shapeBuffer -> MoveResult shapeBuffer
+continueWithUpdatedDroppingShape newDroppingShape resetTimerDrop model =
     Continue
         { game = Game { model | state = RegularGameState { droppingShape = newDroppingShape } }
-        , shapeRowChanged = shapedDropped
+        , resetTimerDrop = resetTimerDrop
         }
+
+
+isOnDifferentRow : DroppingShape -> DroppingShape -> Bool
+isOnDifferentRow droppingShape1 droppingShape2 =
+    Tuple.second droppingShape1.gridCoord /= Tuple.second droppingShape2.gridCoord
 
 
 {-| Called when the animation of rows about to be removed has completed. Removes those rows and returns the game to its
