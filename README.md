@@ -37,7 +37,7 @@ Current state: **WIP.**
 - [x] Show upcoming piece
 - [x] Show where currently dropping shape would land
 - [x] Add "Hold" feature
-- [ ] Add key binding for dropping current piece immediately (space bar?)
+- [x] Add key binding for dropping current piece immediately (space bar?)
 - [ ] Add ability to pause game
 - [ ] Scores
 - [ ] High scores (persisted to local storage)

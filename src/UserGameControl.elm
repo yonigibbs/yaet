@@ -68,7 +68,7 @@ init =
                 { moveLeft = "ArrowLeft"
                 , moveRight = "ArrowRight"
                 , dropOneRow = "ArrowDown"
-                , dropImmediately = " "
+                , dropToBottom = " "
                 , rotateClockwise = "x"
                 , rotateAnticlockwise = "z"
                 , hold = "c"
@@ -165,7 +165,10 @@ removeNonRepeatableActions =
                 Game.Rotate _ ->
                     False
 
-                _ ->
+                Game.Hold ->
+                    False
+
+                Game.Move _ ->
                     True
         )
 
@@ -244,19 +247,19 @@ buildKeyboardConfig :
     { moveLeft : String
     , moveRight : String
     , dropOneRow : String
-    , dropImmediately : String
+    , dropToBottom : String
     , rotateClockwise : String
     , rotateAnticlockwise : String
     , hold : String
     }
     -> KeyboardConfig
-buildKeyboardConfig { moveLeft, moveRight, dropOneRow, dropImmediately, rotateClockwise, rotateAnticlockwise, hold } =
+buildKeyboardConfig { moveLeft, moveRight, dropOneRow, dropToBottom, rotateClockwise, rotateAnticlockwise, hold } =
     KeyboardConfig <|
         Dict.fromList
             [ ( String.toLower moveLeft, Game.Move Game.Left )
             , ( String.toLower moveRight, Game.Move Game.Right )
             , ( String.toLower dropOneRow, Game.Move Game.Down )
-            , ( String.toLower dropImmediately, Game.DropToBottom )
+            , ( String.toLower dropToBottom, Game.DropToBottom )
             , ( String.toLower rotateClockwise, Game.Rotate Shape.Clockwise )
             , ( String.toLower rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
             , ( String.toLower hold, Game.Hold )
