@@ -1,8 +1,13 @@
 module Main exposing (main)
 
-{-| This is the main module of the application. It renders the main UI (the instructions etc), delegating the rendering
-of the actual game to `GameView`. It's responsible for passing user/timer events to the `Game` module for it to update
-the game accordingly.
+{-| This is the main module of the application. It delegates control to a number of submodules and handles transitioning
+between them. The main modules are:
+
+  - `WelcomeScreen`: used when the value of this module's model is `Welcome`. Shows the Welcome screen to the user.
+  - `UserGame`: used when the value of this module's model is `Playing`. Shows the actual game.
+  - `GameOver`: used when the value of this module's model is `GameOver`. Shows the "Game Over" message to the user for
+    a few seconds then moves back to the Welcome screen.
+
 -}
 
 import Browser

@@ -2,10 +2,10 @@ module UserGame exposing (Model, Msg, UpdateResult(..), boardViewConfig, init, s
 
 {-| This module contains functionality related to a game being played by the user. The actual game logic itself is all
 in the `Game` module, but that module itself is, in a sense, "inert" - it doesn't do anything by itself, instead requiring
-a "controlling" module which will act on it (e.g. tell it to move a shape in some direction, generate a random shape
-for it, etc). This module does that when the game is being controlled normally by the user (as opposed to, for example,
+a "controlling" module which will act on it (e.g. tell it to move a shape in some direction, tell it some time period has
+elapsed, etc). This module does that when the game is being controlled normally by the user (as opposed to, for example,
 in a unit test). This module provides that control, and also the view for rendering the game screen to the user (with
-the board and other related items such as a Pause button, etc.
+the board and other related items such as a Pause button, etc.).
 -}
 
 import BoardView
