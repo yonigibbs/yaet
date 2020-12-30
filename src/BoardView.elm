@@ -65,6 +65,7 @@ type BlockFillType
 {-| Renders the current state of the board into an HTML element, using SVG. Parameters:
 
   - `config`: configuration information required to render the board (e.g. the sizes, etc).
+  - `showPauseOverlay`: whether to overlay the board with a "Pause" image (used when the game is paused).
   - `normalBlocks`: the normal blocks (e.g. the landed blocks, but the blocks of the currently dropping shape, if it's
     not to be animated at the moment).
   - `previewLandingBlocks`: the coordinates and colour of the blocks of the currently dropping shape in the position
@@ -74,8 +75,8 @@ type BlockFillType
     in it).
 
 -}
-view : Config -> List BlockViewInfo -> List ( Coord, Shape.BlockColour ) -> Maybe HighlightAnimation.Model -> Element msg
-view ({ borderStyle, showGridLines } as config) normalBlocks previewLandingBlocks highlightAnimation =
+view : Config -> Bool -> List BlockViewInfo -> List ( Coord, Shape.BlockColour ) -> Maybe HighlightAnimation.Model -> Element msg
+view ({ borderStyle, showGridLines } as config) showPauseOverlay normalBlocks previewLandingBlocks highlightAnimation =
     let
         ( overlay, borderAttrs ) =
             case borderStyle of
@@ -120,6 +121,13 @@ view ({ borderStyle, showGridLines } as config) normalBlocks previewLandingBlock
 
             else
                 []
+
+        pauseOverlaySvg =
+            if showPauseOverlay then
+                pauseOverlay
+
+            else
+                []
     in
     Element.el borderAttrs
         (Element.html <|
@@ -131,8 +139,39 @@ view ({ borderStyle, showGridLines } as config) normalBlocks previewLandingBlock
                     ++ drawBlocks config identity (asFilled normalBlocks)
                     ++ highlightedBlocks
                     ++ overlay
+                    ++ pauseOverlaySvg
                 )
         )
+
+
+{-| Gets a rectangle with 60% opacity to overlay the full board rectangle (to fade its original contents out a bit), with
+a "Pause" image on it. Used when the game is paused.
+-}
+pauseOverlay : List (Svg msg)
+pauseOverlay =
+    let
+        bar x =
+            Svg.rect
+                [ SvgA.width <| SvgT.percent 10
+                , SvgA.height <| SvgT.percent 20
+                , SvgA.x <| SvgT.percent x
+                , SvgA.y <| SvgT.percent 40
+                , SvgA.rx <| SvgT.px 3
+                , SvgA.ry <| SvgT.px 3
+                , SvgA.fill <| SvgT.Paint Color.white
+                ]
+                []
+    in
+    [ Svg.rect
+        [ SvgA.width <| SvgT.percent 100
+        , SvgA.height <| SvgT.percent 100
+        , SvgA.fill <| SvgT.Paint <| Color.rgb255 50 50 50
+        , SvgA.opacity <| SvgT.Opacity 0.6
+        ]
+        []
+    , bar 35
+    , bar 55
+    ]
 
 
 {-| Converts a list of tuples containing coordinates and colour into a list of `BlockViewInfo`, by setting the specified

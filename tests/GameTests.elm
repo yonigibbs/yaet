@@ -395,26 +395,26 @@ withInitialShape initialShape shapes =
             initialShape :: rest
 
 
-timerDrop : Game (List Shape) -> Game.MoveResult (List Shape)
+timerDrop : Game (List Shape) -> Game.UpdateResult (List Shape)
 timerDrop =
     Game.timerDrop getNextShape
 
 
-executeUserActions : List Game.UserAction -> Game (List Shape) -> Game.MoveResult (List Shape)
+executeUserActions : List Game.UserAction -> Game (List Shape) -> Game.UpdateResult (List Shape)
 executeUserActions actions =
     Game.executeUserActions getNextShape actions
 
 
-{-| Progresses the game by executing some function that returns a `MoveResult` (e.g. `Game.timerDrop` or
-`Game.rotateShape`. This can either be simulating a user action like pressing an arrow, or simulating a timer event.
+{-| Progresses the game by executing some function that updates the game (e.g. `Game.timerDrop` or `Game.rotateShape`).
+This can either be simulating a user action like pressing an arrow, or simulating a timer event.
 -}
-progressGame : (Game (List Shape) -> Game.MoveResult (List Shape)) -> GameState -> GameState
+progressGame : (Game (List Shape) -> Game.UpdateResult (List Shape)) -> GameState -> GameState
 progressGame action state =
     let
-        moveResult =
+        gameUpdateResult =
             action state.game
     in
-    case moveResult of
+    case gameUpdateResult of
         Game.NoChange ->
             state
 
@@ -428,11 +428,14 @@ progressGame action state =
             -- TODO: is this OK to do in tests?
             Debug.todo "Unexpected game over"
 
+        Game.Paused _ ->
+            state
+
 
 {-| Executes the given action the given number of times, starting from the supplied state, and returning the state at the
 end of all those actions.
 -}
-repeat : Int -> (Game (List Shape) -> Game.MoveResult (List Shape)) -> GameState -> GameState
+repeat : Int -> (Game (List Shape) -> Game.UpdateResult (List Shape)) -> GameState -> GameState
 repeat count action state =
     List.range 1 count
         |> List.foldl (\_ state_ -> progressGame action state_) state

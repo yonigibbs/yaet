@@ -128,7 +128,7 @@ view (Model modelData) =
             calcViewInfo modelData
 
         boardView =
-            BoardView.view UserGame.boardViewConfig (modelData.blocks |> BoardView.withOpacity 1) [] Nothing
+            BoardView.view UserGame.boardViewConfig False (modelData.blocks |> BoardView.withOpacity 1) [] Nothing
 
         gameOverOverlay =
             Element.row

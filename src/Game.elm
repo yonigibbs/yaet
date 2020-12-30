@@ -2,11 +2,12 @@ module Game exposing
     ( Game
     , GameBlockInfo
     , MoveDirection(..)
-    , MoveResult(..)
+    , UpdateResult(..)
     , UserAction(..)
     , blocks
     , executeUserActions
     , holdShape
+    , isPaused
     , new
     , onRowRemovalAnimationComplete
     , previewLandingBlocks
@@ -80,11 +81,16 @@ type alias HoldInfo =
     on the board at this point, but are being animated in some way (see `HighlightAnimation`), typically by flashing them.
     The data for this variant contains the indexes of the rows which are complete, and the dropping shape to render once
     the animation is complete and the game reverts to the regular state.
+  - `PausedGameState`: the game is paused. We will always return to `RegularGameState` from this, so we only store the
+    `droppingShape` that state needs. In the unlikely event that a user pauses the game while in the `RowRemovalGameState`
+    (which is only 150ms, so pretty unlikely), we move out of that state to `RegularGameState` first (i.e. we pretend
+    the row removal "flash" animation has completed) then go to the paused state.
 
 -}
 type GameState
     = RegularGameState { droppingShape : DroppingShape }
     | RowRemovalGameState { completedRowIndexes : List Int, nextDroppingShape : DroppingShape }
+    | PausedGameState { droppingShape : DroppingShape }
 
 
 {-| Information about all the blocks currently shown in the game (both the landed blocks and the blocks in the currently
@@ -96,7 +102,7 @@ dropping shape).
     row it can go on, just before being considered as having landed, or blocks that form part of a row about to
     be removed).
 
-The type of animation isn't defined here: it's defined in `MoveResult`.
+The type of animation isn't defined here: it's defined by whatever variant of `UpdateResult` is returned.
 
 -}
 type alias GameBlockInfo =
@@ -173,6 +179,7 @@ type UserAction
     | DropToBottom
     | Rotate Shape.RotationDirection
     | Hold
+    | TogglePause
 
 
 {-| The result of executing a single user action:
@@ -187,7 +194,8 @@ type UserActionResult
     | Allowed DroppingShape
 
 
-{-| The result of an action (either automated by a timer or made by the user) which moves a block:
+{-| The result of an action (either automated by a timer or made by the user) which typically moves a block (although
+might not, e.g. the action to pause a game):
 
   - `NoChange`: the move was rejected (e.g. trying to move a block left when it's already at the leftmost point it can
     go on the board). The game's model hasn't changed as a result of this attempt.
@@ -199,15 +207,17 @@ type UserActionResult
     highlighted blocks with the animation used for rows being removed (a "flash" effect). When that animation is
     complete, it should call `onRowRemovalAnimationComplete` again, which will remove those rows and drop all the other
     rows accordingly.
+  - `Paused`: the game has been paused.
   - `EndGame`: the game has now ended.
 
 See comments on this module for an explanation of the `shapeBuffer` type parameter.
 
 -}
-type MoveResult shapeBuffer
+type UpdateResult shapeBuffer
     = NoChange
     | Continue { game : Game shapeBuffer, resetTimerDrop : Bool }
     | RowBeingRemoved { game : Game shapeBuffer }
+    | Paused { game : Game shapeBuffer }
     | GameOver { game : Game shapeBuffer }
 
 
@@ -215,7 +225,7 @@ type MoveResult shapeBuffer
 second or so). Drops the current shape one row if possible, otherwise treats it as now having landed, and uses the next
 shape as the new dropping shape.
 -}
-timerDrop : GetShape shapeBuffer -> Game shapeBuffer -> MoveResult shapeBuffer
+timerDrop : GetShape shapeBuffer -> Game shapeBuffer -> UpdateResult shapeBuffer
 timerDrop getShape (Game ({ state, board } as model)) =
     case state of
         RegularGameState { droppingShape } ->
@@ -234,65 +244,76 @@ timerDrop getShape (Game ({ state, board } as model)) =
         RowRemovalGameState _ ->
             NoChange
 
+        PausedGameState _ ->
+            NoChange
+
 
 {-| Executes the supplied of user actions (e.g. moves the dropping shape left and down, if those keys are currently
 being held down).
 -}
-executeUserActions : GetShape shapeBuffer -> List UserAction -> Game shapeBuffer -> MoveResult shapeBuffer
-executeUserActions getShape actions (Game ({ state, board, holdInfo } as model)) =
-    case state of
-        RegularGameState { droppingShape } ->
-            -- The Hold and Drop To Bottom actions are executed by themselves - other actions are ignored.
-            if List.any isHoldAction actions then
-                executeHoldAction getShape model droppingShape
+executeUserActions : GetShape shapeBuffer -> List UserAction -> Game shapeBuffer -> UpdateResult shapeBuffer
+executeUserActions getShape actions ((Game ({ state, board, holdInfo } as model)) as game) =
+    if List.any isTogglePauseAction actions then
+        -- Pausing the game: ignore all other actions.
+        togglePause game
 
-            else if List.any isDropToBottomAction actions then
-                executeDropToBottomAction getShape model droppingShape
+    else
+        case state of
+            RegularGameState { droppingShape } ->
+                -- The Hold and Drop To Bottom actions are executed by themselves - other actions are ignored.
+                if List.any isHoldAction actions then
+                    executeHoldAction getShape model droppingShape
 
-            else
-                -- TODO: if the actions are "drop down" and "move left", and the shape is directly on top of another
-                -- it cannot be dropped down, but can be moved left, so that's all that'll happen. But it might be that
-                -- once it's moved left it _can_ now be dropped down. Consider handling this edge case.
-                let
-                    -- Execute all the actions, and keep a boolean (anyChanges) which is set to true if any changes were made.
-                    ( newDroppingShape, anyChanges ) =
-                        actions
-                            |> List.foldl
-                                (\action ( accDroppingShape, accAnyChanges ) ->
-                                    let
-                                        result =
-                                            case action of
-                                                Move direction ->
-                                                    executeMoveAction board accDroppingShape direction
-
-                                                Rotate direction ->
-                                                    executeRotateAction board accDroppingShape direction
-
-                                                _ ->
-                                                    -- These were handled separately above
-                                                    NotAllowed
-                                    in
-                                    case result of
-                                        NotAllowed ->
-                                            ( accDroppingShape, accAnyChanges )
-
-                                        Allowed updatedDroppingShape ->
-                                            ( updatedDroppingShape, True )
-                                )
-                                ( droppingShape, False )
-
-                    -- Reset the timer drop if the shape has moved down a row.
-                    resetTimerDrop =
-                        isOnDifferentRow droppingShape newDroppingShape
-                in
-                if anyChanges then
-                    continueWithUpdatedDroppingShape newDroppingShape resetTimerDrop model
+                else if List.any isDropToBottomAction actions then
+                    executeDropToBottomAction getShape model droppingShape
 
                 else
-                    NoChange
+                    -- TODO: if the actions are "drop down" and "move left", and the shape is directly on top of another
+                    -- it cannot be dropped down, but can be moved left, so that's all that'll happen. But it might be that
+                    -- once it's moved left it _can_ now be dropped down. Consider handling this edge case.
+                    let
+                        -- Execute all the actions, and keep a boolean (anyChanges) which is set to true if any changes were made.
+                        ( newDroppingShape, anyChanges ) =
+                            actions
+                                |> List.foldl
+                                    (\action ( accDroppingShape, accAnyChanges ) ->
+                                        let
+                                            result =
+                                                case action of
+                                                    Move direction ->
+                                                        executeMoveAction board accDroppingShape direction
 
-        RowRemovalGameState _ ->
-            NoChange
+                                                    Rotate direction ->
+                                                        executeRotateAction board accDroppingShape direction
+
+                                                    _ ->
+                                                        -- These were handled separately above
+                                                        NotAllowed
+                                        in
+                                        case result of
+                                            NotAllowed ->
+                                                ( accDroppingShape, accAnyChanges )
+
+                                            Allowed updatedDroppingShape ->
+                                                ( updatedDroppingShape, True )
+                                    )
+                                    ( droppingShape, False )
+
+                        -- Reset the timer drop if the shape has moved down a row.
+                        resetTimerDrop =
+                            isOnDifferentRow droppingShape newDroppingShape
+                    in
+                    if anyChanges then
+                        continueWithUpdatedDroppingShape newDroppingShape resetTimerDrop model
+
+                    else
+                        NoChange
+
+            RowRemovalGameState _ ->
+                NoChange
+
+            PausedGameState _ ->
+                NoChange
 
 
 isHoldAction : UserAction -> Bool
@@ -309,6 +330,16 @@ isDropToBottomAction : UserAction -> Bool
 isDropToBottomAction action =
     case action of
         DropToBottom ->
+            True
+
+        _ ->
+            False
+
+
+isTogglePauseAction : UserAction -> Bool
+isTogglePauseAction action =
+    case action of
+        TogglePause ->
             True
 
         _ ->
@@ -338,7 +369,7 @@ executeMoveAction board droppingShape direction =
         NotAllowed
 
 
-executeDropToBottomAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> MoveResult shapeBuffer
+executeDropToBottomAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> UpdateResult shapeBuffer
 executeDropToBottomAction getShape model droppingShape =
     handleDroppingShapeLanded getShape (calcLandingPos model.board droppingShape) True model
 
@@ -346,7 +377,7 @@ executeDropToBottomAction getShape model droppingShape =
 {-| Swaps the currently dropping shape with the shape previously put into hold (if there is one) or the next dropping
 shape (if there isn't). Only does this if possible.
 -}
-executeHoldAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> MoveResult shapeBuffer
+executeHoldAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> UpdateResult shapeBuffer
 executeHoldAction getShape ({ board, holdInfo, nextShape } as model) currentDroppingShape =
     let
         ( isSwapAllowed, shapeToSwap, buildModel ) =
@@ -380,6 +411,35 @@ executeHoldAction getShape ({ board, holdInfo, nextShape } as model) currentDrop
         NoChange
 
 
+{-| Gets a boolean indicating whether the game is currently paused or not.
+-}
+isPaused : Game shapeBuffer -> Bool
+isPaused (Game { state }) =
+    case state of
+        PausedGameState _ ->
+            True
+
+        _ ->
+            False
+
+
+{-| Pauses/resumes the game.
+-}
+togglePause : Game shapeBuffer -> UpdateResult shapeBuffer
+togglePause ((Game model) as game) =
+    case model.state of
+        RegularGameState { droppingShape } ->
+            Paused { game = Game { model | state = PausedGameState { droppingShape = droppingShape } } }
+
+        RowRemovalGameState _ ->
+            -- We're in the middle of animating a "flash" indicating that a row is being removed - just complete that to
+            -- get back to normal playing state, then pause the game.
+            onRowRemovalAnimationComplete game |> togglePause
+
+        PausedGameState { droppingShape } ->
+            Continue { game = Game { model | state = RegularGameState { droppingShape = droppingShape } }, resetTimerDrop = True }
+
+
 {-| Gets the next valid position for a rotate shape, if one exists. Moves the shape back onto the board if its rotation
 has meant that it's now off either side.
 -}
@@ -409,7 +469,7 @@ nextValidRotatedDroppingShape droppingShape board =
 {-| Handles the case when the dropping shape has landed: appends its blocks to the board and takes the next item off the
 buffer to be the new "next" shape.
 -}
-handleDroppingShapeLanded : GetShape shapeBuffer -> DroppingShape -> Bool -> Model shapeBuffer -> MoveResult shapeBuffer
+handleDroppingShapeLanded : GetShape shapeBuffer -> DroppingShape -> Bool -> Model shapeBuffer -> UpdateResult shapeBuffer
 handleDroppingShapeLanded getShape droppingShape resetTimerDrop ({ state, board, nextShape } as model) =
     let
         { colour } =
@@ -477,7 +537,7 @@ withAllowHoldSwap model =
             model
 
 
-continueWithUpdatedDroppingShape : DroppingShape -> Bool -> Model shapeBuffer -> MoveResult shapeBuffer
+continueWithUpdatedDroppingShape : DroppingShape -> Bool -> Model shapeBuffer -> UpdateResult shapeBuffer
 continueWithUpdatedDroppingShape newDroppingShape resetTimerDrop model =
     Continue
         { game = Game { model | state = RegularGameState { droppingShape = newDroppingShape } }
@@ -545,21 +605,7 @@ blocks : Game shapeBuffer -> GameBlockInfo
 blocks (Game { board, state }) =
     case state of
         RegularGameState { droppingShape } ->
-            let
-                { colour } =
-                    Shape.data droppingShape.shape
-
-                droppingShapeBlocks =
-                    DroppingShape.calcShapeBlocksBoardCoords droppingShape |> BoardView.withColour colour
-
-                canDropMore =
-                    isValidPosition board { droppingShape | gridCoord = nextCoord Down droppingShape.gridCoord }
-            in
-            if canDropMore then
-                { normal = GameBoard.occupiedCells board ++ droppingShapeBlocks, highlighted = [] }
-
-            else
-                { normal = GameBoard.occupiedCells board, highlighted = droppingShapeBlocks }
+            blocksWithDroppingShape board droppingShape
 
         RowRemovalGameState { completedRowIndexes } ->
             let
@@ -568,6 +614,28 @@ blocks (Game { board, state }) =
                         |> List.partition (\( ( _, cellRowIndex ), _ ) -> List.member cellRowIndex completedRowIndexes)
             in
             { normal = normalCells, highlighted = completedRowCells }
+
+        PausedGameState { droppingShape } ->
+            blocksWithDroppingShape board droppingShape
+
+
+blocksWithDroppingShape : GameBoard -> DroppingShape -> GameBlockInfo
+blocksWithDroppingShape board droppingShape =
+    let
+        { colour } =
+            Shape.data droppingShape.shape
+
+        droppingShapeBlocks =
+            DroppingShape.calcShapeBlocksBoardCoords droppingShape |> BoardView.withColour colour
+
+        canDropMore =
+            isValidPosition board { droppingShape | gridCoord = nextCoord Down droppingShape.gridCoord }
+    in
+    if canDropMore then
+        { normal = GameBoard.occupiedCells board ++ droppingShapeBlocks, highlighted = [] }
+
+    else
+        { normal = GameBoard.occupiedCells board, highlighted = droppingShapeBlocks }
 
 
 {-| Gets the upcoming shape in the game.
@@ -590,26 +658,33 @@ dropping shape is already at its lowest possible position).
 -}
 previewLandingBlocks : Game shapeBuffer -> List ( Coord, Shape.BlockColour )
 previewLandingBlocks (Game { board, state }) =
-    case state of
-        RegularGameState { droppingShape } ->
+    let
+        blocksFromDroppingShape droppingShape_ =
             let
                 { colour } =
-                    Shape.data droppingShape.shape
+                    Shape.data droppingShape_.shape
 
                 landingShape : DroppingShape
                 landingShape =
-                    calcLandingPos board droppingShape
+                    calcLandingPos board droppingShape_
             in
             -- If shape is already where it would be, were it to land, we don't have a preview
-            if landingShape.gridCoord == droppingShape.gridCoord then
+            if landingShape.gridCoord == droppingShape_.gridCoord then
                 []
 
             else
                 DroppingShape.calcShapeBlocksBoardCoords landingShape |> BoardView.withColour colour
+    in
+    case state of
+        RegularGameState { droppingShape } ->
+            blocksFromDroppingShape droppingShape
 
-        RowRemovalGameState { completedRowIndexes } ->
+        RowRemovalGameState _ ->
             -- We don't have a currently dropping shape so can't preview where it would land.
             []
+
+        PausedGameState { droppingShape } ->
+            blocksFromDroppingShape droppingShape
 
 
 {-| Gets a `DroppingShape` representing the supplied shape, at its lowest possible position (i.e. where it would land

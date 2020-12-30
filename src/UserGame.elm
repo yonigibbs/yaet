@@ -125,7 +125,7 @@ update msg model =
                 -- with another "landing" shape). If we don't reset it to Nothing here, the code eventually gets confused
                 -- and thinks it's the same animation continuing, but actually it's two distinct ones.
                 Game.timerDrop Shape.next playingModel.game
-                    |> handleMoveResult { playingModel | highlightAnimation = Nothing } True
+                    |> handleGameUpdateResult { playingModel | highlightAnimation = Nothing } True
 
             else
                 Continue ( model, Cmd.none )
@@ -175,24 +175,33 @@ handleGameControlMsg playingModel gameControlMsg =
         ( nextGameControlModel, actionsToExecute ) =
             UserGameControl.update playingModel.gameControl gameControlMsg
 
-        moveResult =
+        gameUpdateResult =
             Game.executeUserActions Shape.next actionsToExecute playingModel.game
 
-        -- If a shape was dropped then reset the timer drop delay. Additionally, decide whether to ignore any future
-        -- timer drop messages that were previously initiated (but haven't arrived yet).
-        ( startNewTimerDropDelay, ignoreInFlightTimerDropMessages ) =
-            case moveResult of
+        -- Three values are set based on the update result:
+        -- `startNewTimerDropDelay`: if a shape was dropped then reset the timer drop delay.
+        -- `ignoreInFlightTimerDropMessages`: whether to ignore any future timer drop messages that were previously
+        -- initiated (but haven't arrived yet).
+        -- `removeRowRemovalAnimation`: whether to remove the row removal animation. This will be true if the game is
+        -- now paused and the current animation was of that type. This is in case a user hits Pause exactly during that
+        -- (very brief) animation. The Game` module handles that by simply pretending that animation has completed (see
+        -- `Game.togglePause` for the `RowRemovalGameState` case) so we need to remove it here.
+        ( startNewTimerDropDelay, ignoreInFlightTimerDropMessages, removeRowRemovalAnimation ) =
+            case gameUpdateResult of
                 Game.NoChange ->
-                    ( False, False )
+                    ( False, False, False )
 
                 Game.Continue { resetTimerDrop } ->
-                    ( resetTimerDrop, resetTimerDrop )
+                    ( resetTimerDrop, resetTimerDrop, False )
 
                 Game.RowBeingRemoved _ ->
-                    ( False, True )
+                    ( False, True, False )
+
+                Game.Paused _ ->
+                    ( False, True, isCurrentAnimationRowRemoval playingModel )
 
                 Game.GameOver _ ->
-                    ( False, True )
+                    ( False, True, False )
 
         -- If we're starting a new timer drop delay the increment the `timerDropMessageId` so that when the current
         -- `Process.sleep` eventually returns we'll know to ignore it.
@@ -202,14 +211,29 @@ handleGameControlMsg playingModel gameControlMsg =
 
             else
                 playingModel.timerDropMessageId
+
+        nextHighlightAnimation =
+            if removeRowRemovalAnimation then
+                Nothing
+
+            else
+                playingModel.highlightAnimation
+
+        nextPlayingModel =
+            { playingModel
+                | gameControl = nextGameControlModel
+                , timerDropMessageId = newTimerDropSubscriptionId
+                , highlightAnimation = nextHighlightAnimation
+            }
     in
-    handleMoveResult
-        { playingModel
-            | gameControl = nextGameControlModel
-            , timerDropMessageId = newTimerDropSubscriptionId
-        }
-        startNewTimerDropDelay
-        moveResult
+    handleGameUpdateResult nextPlayingModel startNewTimerDropDelay gameUpdateResult
+
+
+isCurrentAnimationRowRemoval : PlayingModel -> Bool
+isCurrentAnimationRowRemoval { highlightAnimation } =
+    highlightAnimation
+        |> Maybe.map HighlightAnimation.isRowRemoval
+        |> Maybe.withDefault False
 
 
 {-| Gets the command which will sleep for `timerDropDelay` ms then cause the `TimerDropDelayElapsed` message to be invoked.
@@ -224,8 +248,8 @@ timerDropDelayCmd { timerDropDelay, timerDropMessageId } =
 the asynchronous generation of a new random shape (which is then added to the game's model later). Will also start a new
 timer drop delay (by including a `Process.sleep` task in the returned `UpdateResult`) if required.
 -}
-handleMoveResult : PlayingModel -> Bool -> Game.MoveResult Shape.Bag -> UpdateResult
-handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
+handleGameUpdateResult : PlayingModel -> Bool -> Game.UpdateResult Shape.Bag -> UpdateResult
+handleGameUpdateResult currentPlayingModel startNewTimerDropDelay gameUpdateResult =
     let
         -- Gets the command that should be returned in the `UpdateResult`, namely `timerDropDelayCmd` (if required)
         updateResultCmd =
@@ -234,37 +258,43 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
 
             else
                 Cmd.none
+
+        handleUpdatedGame updatedGame =
+            let
+                updatedBlocks =
+                    Game.blocks updatedGame
+            in
+            ( { currentPlayingModel
+                | game = updatedGame
+                , normalBlocks = updatedBlocks.normal
+                , previewLandingBlocks = Game.previewLandingBlocks updatedGame
+              }
+            , updatedBlocks
+            )
     in
-    case moveResult of
+    case gameUpdateResult of
         Game.NoChange ->
             Continue ( Playing currentPlayingModel, updateResultCmd )
 
         Game.Continue { game } ->
             let
-                nextBlocks =
-                    Game.blocks game
-
-                playingModel =
-                    { currentPlayingModel
-                        | game = game
-                        , normalBlocks = nextBlocks.normal
-                        , previewLandingBlocks = Game.previewLandingBlocks game
-                    }
+                ( nextPlayingModel, nextBlocks ) =
+                    handleUpdatedGame game
             in
             case nextBlocks.highlighted of
                 [] ->
                     -- No animation required as there are no highlighted blocks
-                    Continue ( Playing { playingModel | highlightAnimation = Nothing }, updateResultCmd )
+                    Continue ( Playing { nextPlayingModel | highlightAnimation = Nothing }, updateResultCmd )
 
                 _ ->
                     -- There are some blocks we need to animate, but this animation might already be in progress (e.g.
                     -- if a block is on the bottom row but the user moves it left/right - it can just continue its
                     -- current animation).
-                    case playingModel.highlightAnimation of
+                    case nextPlayingModel.highlightAnimation of
                         Nothing ->
                             -- Currently nothing is animated, but now should be, so start a new animation
                             Continue
-                                ( playingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.ShapeLanding |> Playing
+                                ( nextPlayingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.ShapeLanding |> Playing
                                 , updateResultCmd
                                 )
 
@@ -273,7 +303,7 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
                                 -- Just continue this current animation, but update the blocks on it
                                 Continue
                                     ( Playing
-                                        { playingModel
+                                        { nextPlayingModel
                                             | highlightAnimation =
                                                 Just <| HighlightAnimation.withBlocks nextBlocks.highlighted currentAnimation
                                         }
@@ -283,30 +313,30 @@ handleMoveResult currentPlayingModel startNewTimerDropDelay moveResult =
                             else
                                 -- The current animation is different from the one we want now: start a new animation
                                 Continue
-                                    ( playingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.ShapeLanding |> Playing
+                                    ( nextPlayingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.ShapeLanding |> Playing
                                     , updateResultCmd
                                     )
 
         Game.RowBeingRemoved { game } ->
             let
-                nextBlocks =
-                    Game.blocks game
-
-                playingModel =
-                    { currentPlayingModel
-                        | game = game
-                        , normalBlocks = nextBlocks.normal
-                        , previewLandingBlocks = Game.previewLandingBlocks game
-                    }
+                ( nextPlayingModel, nextBlocks ) =
+                    handleUpdatedGame game
             in
             -- Don't call updateResultCmd here - if a row is being removed we _don't_ want a timer drop delay to start yet.
             Continue
-                ( playingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.RowRemoval |> Playing
+                ( nextPlayingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.RowRemoval |> Playing
                 , Cmd.none
                 )
 
         Game.GameOver { game } ->
             GameOver game
+
+        Game.Paused { game } ->
+            let
+                ( nextPlayingModel, _ ) =
+                    handleUpdatedGame game
+            in
+            Continue ( Playing nextPlayingModel, Cmd.none )
 
 
 {-| Starts a new animation.
@@ -358,9 +388,16 @@ handleAnimationMsg model msg =
                         HighlightAnimation.Complete ->
                             case HighlightAnimation.highlightAnimationType currentAnimation of
                                 HighlightAnimation.ShapeLanding ->
-                                    -- We've finished animating a shape landing: stop animating. Whenever the timerDrop
-                                    -- subscription fires next the game will move on.
-                                    Continue ( Playing { playingModel | highlightAnimation = Nothing }, Cmd.none )
+                                    -- We've finished animating a shape landing: stop animating, and act as if a timer
+                                    -- drop has occurred: also increment the timer drop message ID to make sure we ignore
+                                    -- the next timer drop message, which should arrive at roughly the same time.
+                                    Game.timerDrop Shape.next playingModel.game
+                                        |> handleGameUpdateResult
+                                            { playingModel
+                                                | highlightAnimation = Nothing
+                                                , nextAnimationId = HighlightAnimation.nextAnimationId playingModel.nextAnimationId
+                                            }
+                                            True
 
                                 HighlightAnimation.RowRemoval ->
                                     -- When we've finished animating rows about to be removed, call
@@ -377,6 +414,7 @@ handleAnimationMsg model msg =
                                                 , timerDropDelay = max (playingModel.timerDropDelay - 10) 100
                                                 , normalBlocks = (Game.blocks nextGame).normal
                                                 , highlightAnimation = Nothing
+                                                , previewLandingBlocks = Game.previewLandingBlocks nextGame
                                             }
                                         , timerDropDelayCmd playingModel
                                         )
@@ -398,20 +436,24 @@ view model =
         screenSection content =
             Element.el [ Element.width <| Element.px 400, Element.alignTop ] content
 
-        ( gameBlocks, gamePreviewLandingBlocks, animationModel ) =
+        { normalBlocks, previewLandingBlocks, highlightAnimation, showPauseOverlay } =
             case model of
                 Initialising ->
-                    ( [], [], Nothing )
+                    { normalBlocks = [], previewLandingBlocks = [], highlightAnimation = Nothing, showPauseOverlay = False }
 
-                Playing { normalBlocks, previewLandingBlocks, highlightAnimation, game } ->
-                    ( BoardView.withOpacity 1 normalBlocks, previewLandingBlocks, highlightAnimation )
+                Playing playingModel ->
+                    { normalBlocks = BoardView.withOpacity 1 playingModel.normalBlocks
+                    , previewLandingBlocks = playingModel.previewLandingBlocks
+                    , highlightAnimation = playingModel.highlightAnimation
+                    , showPauseOverlay = Game.isPaused playingModel.game
+                    }
     in
     Element.row [] <|
         -- TODO: show scores
         [ screenSection <| holdShapeView model
         , screenSection <|
             Element.el [ Element.centerX ] <|
-                BoardView.view boardViewConfig gameBlocks gamePreviewLandingBlocks animationModel
+                BoardView.view boardViewConfig showPauseOverlay normalBlocks previewLandingBlocks highlightAnimation
         , screenSection <| upcomingShapeView model
         ]
 
@@ -421,15 +463,15 @@ view model =
 upcomingShapeView : Model -> Element msg
 upcomingShapeView model =
     let
-        upcomingShape =
+        ( upcomingShape, isPaused ) =
             case model of
                 Initialising ->
-                    Nothing
+                    ( Nothing, False )
 
                 Playing { game } ->
-                    Just <| Game.upcomingShape game
+                    ( Just <| Game.upcomingShape game, Game.isPaused game )
     in
-    shapePreview Element.alignLeft "Coming next..." upcomingShape
+    shapePreview Element.alignLeft isPaused "Coming next..." upcomingShape
 
 
 {-| Gets a view showing the upcoming shape in the game.
@@ -437,21 +479,21 @@ upcomingShapeView model =
 holdShapeView : Model -> Element msg
 holdShapeView model =
     let
-        holdShape =
+        ( holdShape, isPaused ) =
             case model of
                 Initialising ->
-                    Nothing
+                    ( Nothing, False )
 
                 Playing { game } ->
-                    Game.holdShape game
+                    ( Game.holdShape game, Game.isPaused game )
     in
-    shapePreview Element.alignRight "Hold" holdShape
+    shapePreview Element.alignRight isPaused "Hold" holdShape
 
 
 {-| Gets a rectangle showing a preview of a shape (e.g. the next shape to drop, or the shape currently on hold).
 -}
-shapePreview : Element.Attribute msg -> String -> Maybe Shape -> Element msg
-shapePreview align caption maybeShape =
+shapePreview : Element.Attribute msg -> Bool -> String -> Maybe Shape -> Element msg
+shapePreview align isPaused caption maybeShape =
     let
         blocks =
             case maybeShape of
@@ -466,24 +508,43 @@ shapePreview align caption maybeShape =
 
         colCount =
             blocks |> List.map (.coord >> Tuple.first) |> List.maximum |> Maybe.withDefault 0 |> (+) 1
+
+        pauseOverlay =
+            if isPaused then
+                [ Element.inFront <|
+                    Element.el
+                        [ Element.Background.color <| Element.rgb255 50 50 50
+                        , Element.width Element.fill
+                        , Element.height Element.fill
+                        , Element.Border.rounded 20
+                        , Element.alpha 0.6
+                        ]
+                        Element.none
+                ]
+
+            else
+                []
     in
     Element.column
-        [ Element.padding 14
-        , Element.spacing 20
-        , Element.Background.color <| Element.rgb255 0 0 0
-        , Element.height <| Element.px 140
-        , Element.width <| Element.px 180
-        , Element.Border.color <| Element.rgb255 100 100 100
-        , Element.Border.width 2
-        , Element.Border.rounded 20
-        , Element.Border.glow (Element.rgb255 200 200 200) 0.2
-        , align
-        ]
+        ([ Element.padding 14
+         , Element.spacing 20
+         , Element.Background.color <| Element.rgb255 0 0 0
+         , Element.height <| Element.px 140
+         , Element.width <| Element.px 180
+         , Element.Border.color <| Element.rgb255 100 100 100
+         , Element.Border.width 2
+         , Element.Border.rounded 20
+         , Element.Border.glow (Element.rgb255 200 200 200) 0.2
+         , align
+         ]
+            ++ pauseOverlay
+        )
         [ Element.el [ Element.centerX, Element.Font.color <| Element.rgb255 100 100 100, Element.Font.semiBold ] <|
             Element.text caption
         , Element.el [ Element.centerX, Element.centerY, Element.centerX ] <|
             BoardView.view
                 { cellSize = cellSize, rowCount = rowCount, colCount = colCount, borderStyle = BoardView.None, showGridLines = False }
+                False
                 blocks
                 []
                 Nothing
@@ -522,10 +583,14 @@ subscriptions model =
         Playing { game, gameControl, timerDropDelay, timerDropMessageId, highlightAnimation } ->
             let
                 animationSubscription =
-                    highlightAnimation
-                        |> Maybe.map
-                            (\animation -> [ HighlightAnimation.subscriptions animation |> Sub.map HighlightAnimationMsg ])
-                        |> Maybe.withDefault []
+                    if Game.isPaused game then
+                        []
+
+                    else
+                        highlightAnimation
+                            |> Maybe.map
+                                (\animation -> [ HighlightAnimation.subscriptions animation |> Sub.map HighlightAnimationMsg ])
+                            |> Maybe.withDefault []
             in
             Sub.batch <|
                 [ UserGameControl.subscriptions gameControl |> Sub.map GotGameControlMsg ]

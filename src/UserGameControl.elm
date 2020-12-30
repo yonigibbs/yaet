@@ -72,6 +72,7 @@ init =
                 , rotateClockwise = "x"
                 , rotateAnticlockwise = "z"
                 , hold = "c"
+                , togglePause = "p"
                 }
         , requests = []
         }
@@ -168,6 +169,9 @@ removeNonRepeatableActions =
                 Game.Hold ->
                     False
 
+                Game.TogglePause ->
+                    False
+
                 Game.Move _ ->
                     True
         )
@@ -230,6 +234,16 @@ conflictsOf action =
             , Game.DropToBottom
             ]
 
+        Game.TogglePause ->
+            [ Game.Move Game.Left
+            , Game.Move Game.Right
+            , Game.Move Game.Down
+            , Game.Rotate Shape.Clockwise
+            , Game.Rotate Shape.Anticlockwise
+            , Game.DropToBottom
+            , Game.Hold
+            ]
+
 
 
 -- KEYBOARD
@@ -251,9 +265,10 @@ buildKeyboardConfig :
     , rotateClockwise : String
     , rotateAnticlockwise : String
     , hold : String
+    , togglePause : String
     }
     -> KeyboardConfig
-buildKeyboardConfig { moveLeft, moveRight, dropOneRow, dropToBottom, rotateClockwise, rotateAnticlockwise, hold } =
+buildKeyboardConfig { moveLeft, moveRight, dropOneRow, dropToBottom, rotateClockwise, rotateAnticlockwise, hold, togglePause } =
     KeyboardConfig <|
         Dict.fromList
             [ ( String.toLower moveLeft, Game.Move Game.Left )
@@ -263,6 +278,7 @@ buildKeyboardConfig { moveLeft, moveRight, dropOneRow, dropToBottom, rotateClock
             , ( String.toLower rotateClockwise, Game.Rotate Shape.Clockwise )
             , ( String.toLower rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
             , ( String.toLower hold, Game.Hold )
+            , ( String.toLower togglePause, Game.TogglePause )
             ]
 
 

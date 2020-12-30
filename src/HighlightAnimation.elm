@@ -9,6 +9,7 @@ module HighlightAnimation exposing
     , animatedOpacity
     , highlightAnimationType
     , initialId
+    , isRowRemoval
     , nextAnimationId
     , startNewAnimation
     , subscriptions
@@ -176,6 +177,18 @@ withBlocks blocks (Model model) =
 highlightAnimationType : Model -> Type
 highlightAnimationType (Model { animationType }) =
     animationType
+
+
+{-| Gets a boolean indicating whether the type of the supplied animation is `RowRemoval`.
+-}
+isRowRemoval : Model -> Bool
+isRowRemoval (Model { animationType }) =
+    case animationType of
+        ShapeLanding ->
+            False
+
+        RowRemoval ->
+            True
 
 
 {-| Gets the blocks contained in the supplied model.

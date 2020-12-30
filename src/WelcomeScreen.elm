@@ -349,7 +349,7 @@ view model startGameMsg =
                 |> BoardView.withOpacity 0.5
     in
     Element.column [ Element.spacingXY 0 25 ]
-        [ BoardView.view boardViewConfig (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
+        [ BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
         , Element.row [ Element.centerX ] [ button "Start Game" startGameMsg ]
         ]
 
