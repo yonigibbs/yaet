@@ -395,7 +395,7 @@ handleAnimationMsg model msg =
                                         |> handleGameUpdateResult
                                             { playingModel
                                                 | highlightAnimation = Nothing
-                                                , nextAnimationId = HighlightAnimation.nextAnimationId playingModel.nextAnimationId
+                                                , timerDropMessageId = playingModel.timerDropMessageId + 1
                                             }
                                             True
 
