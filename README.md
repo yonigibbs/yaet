@@ -40,16 +40,17 @@ Current state: **WIP.**
 - [x] Add key binding for dropping current piece immediately (space bar?)
 - [x] Add ability to pause game
 - [x] Fix issue where guidelines don't show for one frame after line removed
-- [ ] Prevent default on key presses?
+- [ ] Settings/preferences, e.g. keyboard bindings (persisted to local storage)
 - [ ] Scores
 - [ ] High scores (persisted to local storage)
-- [ ] Settings/preferences, e.g. keyboard bindings (persisted to local storage)
 - [ ] Add link to get to source code, etc.
+- [ ] Some moves currently not possible? Investigate T-spin triple, for example.
 - [ ] Consolidate `id` fields used in messages/subscriptions/etc - put into a module and expose as opaque type?
       (e.g. `PlayingModel.timerDropMessageId`, `HighlightAnimation.Id`, etc.)
+- [ ] Prevent default on key presses?
 - [ ] Make UI responsive.
   - [ ] Buttons to use instead of keyboard for phones/tablets?
-  - [ ] Let user pause/resume by clicking on game
+- [ ] Let user pause/resume by clicking on game
 - [ ] Improve Game Over animation - drop the "Game Over" message down from top of board (use SVG for this?)
 - [ ] Use `elm-animator` instead of doing animations manually?
 - [ ] Add smoother transitions (e.g. fade out/in) between welcome screen and game screen

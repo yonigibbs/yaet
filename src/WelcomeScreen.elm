@@ -1,6 +1,7 @@
 module WelcomeScreen exposing (Model, Msg, init, subscriptions, update, view)
 
-{-| This module contains all functionality related to the welcome screen. Manages the animations shown here.
+{-| This module contains all functionality related to the welcome screen. Manages the animated board and functionality
+available from the Welcome screen, e.g. the Settings.
 -}
 
 import Array
@@ -31,8 +32,8 @@ type alias Letter =
     { blocks : List Coord, colour : Shape.BlockColour, gridCoord : Coord }
 
 
-{-| The data associated with the `DroppingLetters` variant of the `Model`. Defines the data required to show the welcome
-screen at the stage where the letters of Tetris are dropping onto the board one by one.
+{-| The data associated with the `DroppingLetters` variant of `AnimatedBoard`. Defines the data required to show the
+welcome screen at the stage where the letters of Tetris are dropping onto the board one by one.
 
   - `landed`: the letters which have already landed.
   - `dropping`: the letter which is currently dropping down.
@@ -50,9 +51,9 @@ type alias DroppingLettersData =
     }
 
 
-{-| The data associated with the `PulsingLetters` variant of the `Model`. Defines the data required to show the welcome
-screen at the stage where the letters of Tetris have already landed and are now being pulsed (faded out then back in
-briefly). This stage doesn't actually use the `randomSeed` value but stores it so it can be passed to the subsequent
+{-| The data associated with the `PulsingLetters` variant of `AnimatedBoard`. Defines the data required to show the
+welcome screen at the stage where the letters of Tetris have already landed and are now being pulsed (faded out then back
+in briefly). This stage doesn't actually use the `randomSeed` value but stores it so it can be passed to the subsequent
 stage (`DroppingRandomShapes`) which does need it.
 -}
 type alias PulsingLettersData =
@@ -62,7 +63,7 @@ type alias PulsingLettersData =
     }
 
 
-{-| The data associated with the `DroppingRandomShapes` variant of the `Model`. Defines the data required to show the
+{-| The data associated with the `DroppingRandomShapes` variant of `AnimatedBoard`. Defines the data required to show the
 welcome screen at the stage where the letters of Tetris have landed and been pulsed, and now random shapes drop down
 "behind" those letters.
 
@@ -81,8 +82,22 @@ type alias DroppingRandomShapesData =
     }
 
 
-{-| The model of this module, exposed as an opaque type. Defines the three stages of the animation shows on the Welcome
-screen (along with an `Initialising` state, used purely to get the current time to use a random seed):
+{-| The model of this module, exposed as an opaque type.
+-}
+type Model
+    = Model ModelData
+
+
+type alias ModelData =
+    { animatedBoard : AnimatedBoard, settings : Maybe Settings }
+
+
+type alias Settings =
+    {}
+
+
+{-| The state of the animated board on the Welcome screen. Defines the three stages of the animation, along with an
+`Initialising` state, used purely to get the current time to use a random seed:
 
   - `DroppingLetters`: The letters of the word "Tetris" are dropping onto the board, one by one.
   - `PulsingLetters`: The letters of the word "Tetris" are being "pulsed" (faded out then back in).
@@ -90,7 +105,7 @@ screen (along with an `Initialising` state, used purely to get the current time 
     letters of Tetris.
 
 -}
-type Model
+type AnimatedBoard
     = Initialising
     | DroppingLetters DroppingLettersData
     | PulsingLetters PulsingLettersData
@@ -99,7 +114,9 @@ type Model
 
 init : ( Model, Cmd Msg )
 init =
-    ( Initialising, Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised) )
+    ( Model { animatedBoard = Initialising, settings = Nothing }
+    , Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised)
+    )
 
 
 
@@ -107,38 +124,43 @@ init =
 
 
 type Msg
-    = Initialised Random.Seed -- Ready to start the animation (the supplied value is used as a random seed for various aspects)
+    = Initialised Random.Seed -- Ready to start the board animation (the supplied value is used as a random seed for various aspects)
     | LetterDropAnimationFrame -- A letter should be dropped another row (or a new letter added)
     | GotHighlightAnimationMsg HighlightAnimation.Msg -- A pulsing animation frame has occurred
     | ShapeDropDelayElapsed -- The delay between each time the dropping shapes are lowered a row has elapsed
 
 
 update : Msg -> Model -> Model
-update msg model =
-    case ( msg, model ) of
+update msg ((Model { animatedBoard }) as model) =
+    case ( msg, animatedBoard ) of
         ( Initialised randomSeed, Initialising ) ->
-            initDroppingLetters randomSeed |> DroppingLetters
+            model |> withAnimatedBoard (initDroppingLetters randomSeed |> DroppingLetters)
 
         ( Initialised _, _ ) ->
             model
 
         ( LetterDropAnimationFrame, DroppingLetters data ) ->
-            onLetterDropAnimationFrame data
+            model |> withAnimatedBoard (onLetterDropAnimationFrame data)
 
         ( LetterDropAnimationFrame, _ ) ->
             model
 
         ( GotHighlightAnimationMsg highlightAnimationMsg, PulsingLetters data ) ->
-            onPulsingLettersAnimationFrame model highlightAnimationMsg data
+            model |> withAnimatedBoard (onPulsingLettersAnimationFrame animatedBoard highlightAnimationMsg data)
 
         ( GotHighlightAnimationMsg _, _ ) ->
             model
 
         ( ShapeDropDelayElapsed, DroppingRandomShapes data ) ->
-            handleShapeDropDelayElapsed data |> DroppingRandomShapes
+            model |> withAnimatedBoard (handleShapeDropDelayElapsed data |> DroppingRandomShapes)
 
         ( ShapeDropDelayElapsed, _ ) ->
             model
+
+
+withAnimatedBoard : AnimatedBoard -> Model -> Model
+withAnimatedBoard animatedBoard (Model modelData) =
+    Model { modelData | animatedBoard = animatedBoard }
 
 
 {-| Gets the initial state of the `DroppingLetters` state of the screen. Gets all the letters ready to drop, along with
@@ -174,7 +196,7 @@ initDroppingLetters randomSeed =
 a new letter to be dropped, or progresses to the next stage once all letters have landed (i.e. to the `PulsingLetters`
 stage).
 -}
-onLetterDropAnimationFrame : DroppingLettersData -> Model
+onLetterDropAnimationFrame : DroppingLettersData -> AnimatedBoard
 onLetterDropAnimationFrame ({ landed, dropping, next, randomSeed } as data) =
     let
         ( gridX, gridY ) =
@@ -212,14 +234,14 @@ onLetterDropAnimationFrame ({ landed, dropping, next, randomSeed } as data) =
 module then, based on its result, either continues the current animation or progresses to the next stage (i.e. the
 `DroppingRandomShapes` stage).
 -}
-onPulsingLettersAnimationFrame : Model -> HighlightAnimation.Msg -> PulsingLettersData -> Model
-onPulsingLettersAnimationFrame model msg data =
+onPulsingLettersAnimationFrame : AnimatedBoard -> HighlightAnimation.Msg -> PulsingLettersData -> AnimatedBoard
+onPulsingLettersAnimationFrame animatedBoard msg data =
     case HighlightAnimation.update msg data.animation of
         HighlightAnimation.IgnoreMsg ->
-            model
+            animatedBoard
 
-        HighlightAnimation.Continue nextAnimationModel ->
-            PulsingLetters { data | animation = nextAnimationModel }
+        HighlightAnimation.Continue animation ->
+            PulsingLetters { data | animation = animation }
 
         HighlightAnimation.Complete ->
             initDroppingRandomShapes data.randomSeed data.letters |> DroppingRandomShapes
@@ -324,10 +346,10 @@ rotateXTimes turns shape =
 
 
 view : Model -> msg -> Element msg
-view model startGameMsg =
+view (Model { animatedBoard }) startGameMsg =
     let
         ( letters_, maybeAnimation, droppingShapes_ ) =
-            case model of
+            case animatedBoard of
                 Initialising ->
                     ( [], Nothing, [] )
 
@@ -410,8 +432,8 @@ droppingShapeToBoardBlocks droppingShape =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    case model of
+subscriptions (Model { animatedBoard }) =
+    case animatedBoard of
         Initialising ->
             Sub.none
 
