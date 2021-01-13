@@ -14,7 +14,10 @@ import Browser
 import Element exposing (Element)
 import Element.Background
 import GameOver
+import HighScores exposing (HighScores)
 import Html exposing (Html)
+import Json.Encode as JE
+import Settings exposing (Settings)
 import UIHelpers exposing (edges)
 import UserGame
 import WelcomeScreen
@@ -33,29 +36,43 @@ main =
         }
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    -- TODO: remove this temp code - useful when testing the Game Over UI
-    --let
-    --    newGame =
-    --        Game.new
-    --            { initialShape = BlockColour.Blue |> (Shape.builders |> Tuple.first)
-    --            , nextShape = BlockColour.Red |> (Shape.builders |> Tuple.first)
-    --            , shapeBuffer = []
-    --            }
-    --in
-    --( GameOver <| GameOver.init newGame, Cmd.none )
-    WelcomeScreen.init |> updateSubModel Welcome GotWelcomeScreenMsg
+{-| The flags passed into the application from the hosting JS. Contains the `settings` (which define such things as the
+key bindings, and the stored high scores).
+-}
+type alias Flags =
+    { settings : JE.Value, highScores : JE.Value }
+
+
+init : Flags -> ( Model, Cmd Msg )
+init { settings, highScores } =
+    initAtWelcomeScreen (HighScores.fromJson highScores) (Settings.fromJson settings)
+
+
+initAtWelcomeScreen : HighScores -> Settings -> ( Model, Cmd Msg )
+initAtWelcomeScreen highScores settings =
+    let
+        ( subModel, subCmd ) =
+            WelcomeScreen.init settings
+    in
+    ( Welcome { model = subModel, highScores = highScores }
+    , Cmd.map GotWelcomeScreenMsg subCmd
+    )
 
 
 
 -- MODEL
 
 
+{-| The model for this app. There is some state which is persisted in local storage (namely the high scores and settings).
+This is read in at the start of the app, then retained in memory thereafter for the duration of the app. In order to retain
+it, we keep that data against every variant below as a separate field (and don't pass it into the models of the variants
+that don't need that data). For variants whose associated model _does_ need access to that data, the variant's model
+(e.g. `WelcomeScreen.Model`) stores it, and we then don't store it as a separate field.
+-}
 type Model
-    = Welcome WelcomeScreen.Model -- No game being played - showing the user some welcome/introductory info
-    | Playing UserGame.Model -- Game is currently being played
-    | GameOver GameOver.Model -- Game has ended
+    = Welcome { model : WelcomeScreen.Model, highScores : HighScores } -- No game being played - showing the user some welcome/introductory info.
+    | Playing { model : UserGame.Model, highScores : HighScores } -- Game is currently being played
+    | GameOver { model : GameOver.Model, settings : Settings } -- Game has ended
 
 
 type Msg
@@ -72,45 +89,51 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model, msg ) of
-        ( Welcome _, StartGameRequested ) ->
-            UserGame.init |> updateSubModel Playing GotPlayingGameMsg
+        ( Welcome welcome, StartGameRequested ) ->
+            WelcomeScreen.getSettings welcome.model
+                |> UserGame.init
+                |> (\( subModel, subCmd ) ->
+                        ( Playing { model = subModel, highScores = welcome.highScores }
+                        , Cmd.map GotPlayingGameMsg subCmd
+                        )
+                   )
 
         ( _, StartGameRequested ) ->
             ( model, Cmd.none )
 
-        ( Welcome welcomeModel, GotWelcomeScreenMsg welcomeScreenMsg ) ->
-            ( WelcomeScreen.update welcomeScreenMsg welcomeModel |> Welcome, Cmd.none )
+        ( Welcome welcome, GotWelcomeScreenMsg subMsg ) ->
+            ( Welcome { welcome | model = WelcomeScreen.update subMsg welcome.model }
+            , Cmd.none
+            )
 
         ( _, GotWelcomeScreenMsg _ ) ->
             ( model, Cmd.none )
 
-        ( Playing playingModel, GotPlayingGameMsg playingMsg ) ->
-            case UserGame.update playingMsg playingModel of
-                UserGame.Continue ( nextPlayingModel, nextPlayingCmd ) ->
-                    ( nextPlayingModel, nextPlayingCmd )
-                        |> updateSubModel Playing GotPlayingGameMsg
+        ( Playing playing, GotPlayingGameMsg subMsg ) ->
+            case UserGame.update subMsg playing.model of
+                UserGame.Continue ( subModel, subCmd ) ->
+                    ( Playing { playing | model = subModel }
+                    , Cmd.map GotPlayingGameMsg subCmd
+                    )
 
                 UserGame.GameOver game ->
-                    ( GameOver <| GameOver.init game, Cmd.none )
+                    ( GameOver { model = GameOver.init playing.highScores game, settings = UserGame.getSettings playing.model }
+                    , Cmd.none
+                    )
 
         ( _, GotPlayingGameMsg _ ) ->
             ( model, Cmd.none )
 
-        ( GameOver gameOverModel, GotGameOverMsg gameOverMsg ) ->
-            case GameOver.update gameOverMsg gameOverModel of
-                GameOver.Continue nextGameOverModel ->
-                    ( GameOver nextGameOverModel, Cmd.none )
+        ( GameOver gameOver, GotGameOverMsg subMsg ) ->
+            case GameOver.update subMsg gameOver.model of
+                GameOver.Continue subModel ->
+                    ( GameOver { gameOver | model = subModel }, Cmd.none )
 
                 GameOver.Done ->
-                    init ()
+                    initAtWelcomeScreen (GameOver.getHighScores gameOver.model) gameOver.settings
 
         ( _, GotGameOverMsg _ ) ->
             ( model, Cmd.none )
-
-
-updateSubModel : (subModel -> Model) -> (subMsg -> Msg) -> ( subModel, Cmd subMsg ) -> ( Model, Cmd Msg )
-updateSubModel subModelMapper subMsgMapper ( subModel, subCmd ) =
-    ( subModelMapper subModel, Cmd.map subMsgMapper subCmd )
 
 
 
@@ -123,17 +146,17 @@ view model =
         contents : Element Msg
         contents =
             case model of
-                Welcome welcomeModel ->
-                    WelcomeScreen.view welcomeModel StartGameRequested |> Element.el []
+                Welcome welcome ->
+                    WelcomeScreen.view welcome.model StartGameRequested GotWelcomeScreenMsg |> Element.el []
 
-                Playing playingModel ->
-                    UserGame.view playingModel |> Element.map GotPlayingGameMsg |> wrapBoardView
+                Playing playing ->
+                    UserGame.view playing.model |> Element.map GotPlayingGameMsg |> wrapBoardView
 
-                GameOver game ->
+                GameOver gameOver ->
                     -- TODO: the below assumes there are no highlighted blocks when the game ends, but the type system doesn't
                     -- currently guarantee that (Game.handleDroppingShapeLanded can result in GameOver even when its state is
                     -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
-                    GameOver.view game |> wrapBoardView
+                    GameOver.view gameOver.model |> wrapBoardView
     in
     Element.layout
         [ Element.width Element.fill
@@ -156,11 +179,11 @@ wrapBoardView boardView =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
-        Welcome welcomeModel ->
-            WelcomeScreen.subscriptions welcomeModel |> Sub.map GotWelcomeScreenMsg
+        Welcome welcome ->
+            WelcomeScreen.subscriptions welcome.model |> Sub.map GotWelcomeScreenMsg
 
-        Playing playingModel ->
-            UserGame.subscriptions playingModel |> Sub.map GotPlayingGameMsg
+        Playing playing ->
+            UserGame.subscriptions playing.model |> Sub.map GotPlayingGameMsg
 
         GameOver _ ->
             GameOver.subscriptions |> Sub.map GotGameOverMsg

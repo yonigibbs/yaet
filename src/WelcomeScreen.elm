@@ -1,4 +1,4 @@
-module WelcomeScreen exposing (Model, Msg, init, subscriptions, update, view)
+module WelcomeScreen exposing (Model, Msg, getSettings, init, subscriptions, update, view)
 
 {-| This module contains all functionality related to the welcome screen. Manages the animated board and functionality
 available from the Welcome screen, e.g. the Settings.
@@ -16,6 +16,7 @@ import Element.Input
 import HighlightAnimation
 import Random
 import Random.Array
+import Settings exposing (Settings)
 import Shape exposing (Shape)
 import Task
 import Time
@@ -89,11 +90,7 @@ type Model
 
 
 type alias ModelData =
-    { animatedBoard : AnimatedBoard, settings : Maybe Settings }
-
-
-type alias Settings =
-    {}
+    { animatedBoard : AnimatedBoard, settings : Settings, showSettingsScreen : Bool }
 
 
 {-| The state of the animated board on the Welcome screen. Defines the three stages of the animation, along with an
@@ -112,9 +109,9 @@ type AnimatedBoard
     | DroppingRandomShapes DroppingRandomShapesData
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( Model { animatedBoard = Initialising, settings = Nothing }
+init : Settings -> ( Model, Cmd Msg )
+init settings =
+    ( Model { animatedBoard = Initialising, settings = settings, showSettingsScreen = False }
     , Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised)
     )
 
@@ -128,6 +125,7 @@ type Msg
     | LetterDropAnimationFrame -- A letter should be dropped another row (or a new letter added)
     | GotHighlightAnimationMsg HighlightAnimation.Msg -- A pulsing animation frame has occurred
     | ShapeDropDelayElapsed -- The delay between each time the dropping shapes are lowered a row has elapsed
+    | ShowSettingsRequested -- The user has requested to see the Settings screen
 
 
 update : Msg -> Model -> Model
@@ -157,10 +155,18 @@ update msg ((Model { animatedBoard }) as model) =
         ( ShapeDropDelayElapsed, _ ) ->
             model
 
+        ( ShowSettingsRequested, _ ) ->
+            model |> withShowSettingsScreen True
+
 
 withAnimatedBoard : AnimatedBoard -> Model -> Model
 withAnimatedBoard animatedBoard (Model modelData) =
     Model { modelData | animatedBoard = animatedBoard }
+
+
+withShowSettingsScreen : Bool -> Model -> Model
+withShowSettingsScreen showSettingsScreen (Model modelData) =
+    Model { modelData | showSettingsScreen = showSettingsScreen }
 
 
 {-| Gets the initial state of the `DroppingLetters` state of the screen. Gets all the letters ready to drop, along with
@@ -345,8 +351,8 @@ rotateXTimes turns shape =
 -- VIEW
 
 
-view : Model -> msg -> Element msg
-view (Model { animatedBoard }) startGameMsg =
+view : Model -> msg -> (Msg -> msg) -> Element msg
+view (Model { animatedBoard }) startGameMsg mapMessage =
     let
         ( letters_, maybeAnimation, droppingShapes_ ) =
             case animatedBoard of
@@ -372,7 +378,10 @@ view (Model { animatedBoard }) startGameMsg =
     in
     Element.column [ Element.spacingXY 0 25 ]
         [ BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
-        , Element.row [ Element.centerX ] [ button "Start Game" startGameMsg ]
+        , Element.row [ Element.centerX ]
+            [ button "Start Game" startGameMsg
+            , button "Settings" (mapMessage ShowSettingsRequested)
+            ]
         ]
 
 
@@ -425,6 +434,15 @@ droppingShapeToBoardBlocks droppingShape =
             Shape.data droppingShape.shape
     in
     DroppingShape.calcShapeBlocksBoardCoords droppingShape |> BoardView.withColour colour
+
+
+
+-- SETTINGS
+
+
+getSettings : Model -> Settings
+getSettings (Model { settings }) =
+    settings
 
 
 
