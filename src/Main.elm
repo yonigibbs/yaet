@@ -147,7 +147,7 @@ view model =
         contents =
             case model of
                 Welcome welcome ->
-                    WelcomeScreen.view welcome.model StartGameRequested GotWelcomeScreenMsg |> Element.el []
+                    WelcomeScreen.view welcome.model StartGameRequested GotWelcomeScreenMsg
 
                 Playing playing ->
                     UserGame.view playing.model |> Element.map GotPlayingGameMsg |> wrapBoardView
@@ -160,11 +160,11 @@ view model =
     in
     Element.layout
         [ Element.width Element.fill
-        , Element.Background.color UIHelpers.mainBackgroundColour
         , Element.height Element.fill
+        , Element.Background.color UIHelpers.mainBackgroundColour
+        , Element.scrollbarY
         ]
-    <|
-        Element.column [ Element.centerX, Element.paddingEach { edges | top = 20 } ] [ contents ]
+        contents
 
 
 wrapBoardView : Element msg -> Element msg

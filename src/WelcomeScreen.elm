@@ -20,7 +20,7 @@ import Settings exposing (Settings)
 import Shape exposing (Shape)
 import Task
 import Time
-import UIHelpers
+import UIHelpers exposing (edges)
 
 
 
@@ -352,7 +352,7 @@ rotateXTimes turns shape =
 
 
 view : Model -> msg -> (Msg -> msg) -> Element msg
-view (Model { animatedBoard }) startGameMsg mapMessage =
+view (Model { animatedBoard, settings, showSettingsScreen }) startGameMsg mapMessage =
     let
         ( letters_, maybeAnimation, droppingShapes_ ) =
             case animatedBoard of
@@ -375,25 +375,104 @@ view (Model { animatedBoard }) startGameMsg mapMessage =
             droppingShapes_
                 |> List.concatMap droppingShapeToBoardBlocks
                 |> BoardView.withOpacity 0.5
+
+        modalAttr =
+            if showSettingsScreen then
+                [ Element.inFront <| settingsModal settings mapMessage ]
+
+            else
+                []
     in
-    Element.column [ Element.spacingXY 0 25 ]
-        [ BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
-        , Element.row [ Element.centerX ]
+    Element.column
+        ([ Element.spacingXY 0 25
+         , Element.height Element.fill
+         , Element.width Element.fill
+         ]
+            ++ modalAttr
+        )
+        [ Element.el [ Element.centerX ] <| BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
+        , Element.row [ Element.centerX, Element.spacingXY 20 0 ]
             [ button "Start Game" startGameMsg
             , button "Settings" (mapMessage ShowSettingsRequested)
             ]
         ]
 
 
+settingsModal : Settings -> (Msg -> msg) -> Element msg
+settingsModal settings mapMessage =
+    Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
+        [ Element.el [ Element.centerX, Element.Font.bold, Element.paddingEach { edges | bottom = 10 } ]
+            (Element.el [ Element.Font.size 24 ] <| Element.text "Settings")
+        , keyBindingsTable settings
+        ]
+        |> Element.el []
+        |> UIHelpers.showModal
+
+
+keyBindingsTable : Settings -> Element msg
+keyBindingsTable settings =
+    let
+        keyActions =
+            Settings.getKeyActions settings
+
+        records =
+            [ ( keyActions.moveLeft, "Move left" )
+            , ( keyActions.moveRight, "Move right" )
+            , ( keyActions.rotateClockwise, "Rotate clockwise" )
+            , ( keyActions.rotateAnticlockwise, "Rotate anticlockwise" )
+            , ( keyActions.dropOneRow, "Soft drop" )
+            , ( keyActions.dropToBottom, "Hard drop" )
+            , ( keyActions.hold, "Hold" )
+            , ( keyActions.togglePause, "Pause" )
+            ]
+
+        column caption contents =
+            { header = Element.el [ Element.Font.size 16, Element.Font.bold, Element.paddingXY 0 4 ] <| Element.text caption
+            , width = Element.fill
+            , view = \record -> Element.el [ Element.Font.size 14, Element.Font.semiBold ] <| contents record
+            }
+    in
+    Element.table [ Element.spacingXY 25 5 ]
+        { data = records
+        , columns =
+            [ column "Action" <| \( _, descr ) -> Element.text descr
+            , column "Key" <| \( key, _ ) -> keyDescription key |> Element.text
+            ]
+        }
+
+
+keyDescription : String -> String
+keyDescription key =
+    case key of
+        " " ->
+            "Space"
+
+        "ArrowLeft" ->
+            "Left arrow"
+
+        "ArrowRight" ->
+            "Right arrow"
+
+        "ArrowDown" ->
+            "Down arrow"
+
+        "ArrowUp" ->
+            "Up arrow"
+
+        _ ->
+            key
+
+
 button : String -> msg -> Element msg
 button caption msg =
     Element.Input.button
         [ Element.Background.color UIHelpers.mainBackgroundColour
-        , Element.Font.color UIHelpers.buttonBorderColor
-        , Element.Border.color UIHelpers.buttonBorderColor
+        , Element.Font.color UIHelpers.mainForegroundColour
+        , Element.Border.color UIHelpers.mainForegroundColour
         , Element.Border.width 2
         , Element.Border.rounded 20
         , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
+        , Element.focused []
         ]
         { onPress = Just msg
         , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)

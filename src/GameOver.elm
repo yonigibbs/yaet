@@ -138,7 +138,7 @@ view (Model modelData) =
                 [ Element.Border.width 2
                 , Element.centerX
                 , Element.centerY
-                , Element.Background.color UIHelpers.buttonBorderColor
+                , Element.Background.color UIHelpers.mainForegroundColour
                 , Element.padding 20
                 , Element.Border.rounded 20
                 , Element.Border.glow (Element.rgb255 200 200 200) messageGlow
