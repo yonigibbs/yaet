@@ -348,7 +348,7 @@ rotateXTimes turns shape =
 
 
 
--- VIEW
+-- VIEW: COMMON
 
 
 view : Model -> msg -> (Msg -> msg) -> Element msg
@@ -396,6 +396,26 @@ view (Model { animatedBoard, settings, showSettingsScreen }) startGameMsg mapMes
             , button "Settings" (mapMessage ShowSettingsRequested)
             ]
         ]
+
+
+button : String -> msg -> Element msg
+button caption msg =
+    Element.Input.button
+        [ Element.Background.color UIHelpers.mainBackgroundColour
+        , Element.Font.color UIHelpers.mainForegroundColour
+        , Element.Border.color UIHelpers.mainForegroundColour
+        , Element.Border.width 2
+        , Element.Border.rounded 20
+        , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
+        , Element.focused []
+        ]
+        { onPress = Just msg
+        , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)
+        }
+
+
+
+-- VIEW: SETTINGS
 
 
 settingsModal : Settings -> (Msg -> msg) -> Element msg
@@ -460,23 +480,11 @@ keyDescription key =
             "Up arrow"
 
         _ ->
-            key
+            String.toUpper key
 
 
-button : String -> msg -> Element msg
-button caption msg =
-    Element.Input.button
-        [ Element.Background.color UIHelpers.mainBackgroundColour
-        , Element.Font.color UIHelpers.mainForegroundColour
-        , Element.Border.color UIHelpers.mainForegroundColour
-        , Element.Border.width 2
-        , Element.Border.rounded 20
-        , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
-        , Element.focused []
-        ]
-        { onPress = Just msg
-        , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)
-        }
+
+-- VIEW: BOARD
 
 
 {-| The configuration required to render the board in the welcome screen.
