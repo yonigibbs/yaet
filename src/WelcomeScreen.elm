@@ -125,7 +125,10 @@ type Msg
     | LetterDropAnimationFrame -- A letter should be dropped another row (or a new letter added)
     | GotHighlightAnimationMsg HighlightAnimation.Msg -- A pulsing animation frame has occurred
     | ShapeDropDelayElapsed -- The delay between each time the dropping shapes are lowered a row has elapsed
-    | ShowSettingsRequested -- The user has requested to see the Settings screen
+    | ShowSettingsRequested -- The user has requested to see the Settings modal
+    | SettingsModalCancelled -- The user has clicked Cancel on the settings modal
+    | SettingsModalSaved -- The user has clicked Save on the settings modal
+    | DefaultSettingsRestored -- The user clicked the Restore Defaults button on the settings modal
 
 
 update : Msg -> Model -> Model
@@ -157,6 +160,17 @@ update msg ((Model { animatedBoard }) as model) =
 
         ( ShowSettingsRequested, _ ) ->
             model |> withShowSettingsScreen True
+
+        ( SettingsModalCancelled, _ ) ->
+            model |> withShowSettingsScreen False
+
+        ( SettingsModalSaved, _ ) ->
+            -- TODO: implement
+            model |> withShowSettingsScreen False
+
+        ( DefaultSettingsRestored, _ ) ->
+            -- TODO: implement
+            model
 
 
 withAnimatedBoard : AnimatedBoard -> Model -> Model
@@ -392,14 +406,14 @@ view (Model { animatedBoard, settings, showSettingsScreen }) startGameMsg mapMes
         )
         [ Element.el [ Element.centerX ] <| BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
         , Element.row [ Element.centerX, Element.spacingXY 20 0 ]
-            [ button "Start Game" startGameMsg
-            , button "Settings" (mapMessage ShowSettingsRequested)
+            [ bigButton "Start Game" startGameMsg
+            , bigButton "Settings" (mapMessage ShowSettingsRequested)
             ]
         ]
 
 
-button : String -> msg -> Element msg
-button caption msg =
+bigButton : String -> msg -> Element msg
+bigButton caption msg =
     Element.Input.button
         [ Element.Background.color UIHelpers.mainBackgroundColour
         , Element.Font.color UIHelpers.mainForegroundColour
@@ -421,12 +435,16 @@ button caption msg =
 settingsModal : Settings -> (Msg -> msg) -> Element msg
 settingsModal settings mapMessage =
     Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
-        [ Element.el [ Element.centerX, Element.Font.bold, Element.paddingEach { edges | bottom = 10 } ]
+        [ Element.el [ Element.centerX, Element.Font.bold, Element.paddingEach { edges | bottom = 15 } ]
             (Element.el [ Element.Font.size 24 ] <| Element.text "Settings")
         , keyBindingsTable settings
         ]
         |> Element.el []
         |> UIHelpers.showModal
+            { onSubmit = SettingsModalSaved |> mapMessage
+            , onCancel = SettingsModalCancelled |> mapMessage
+            , custom = [ ( "Restore Defaults", DefaultSettingsRestored |> mapMessage ) ]
+            }
 
 
 keyBindingsTable : Settings -> Element msg

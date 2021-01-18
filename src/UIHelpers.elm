@@ -6,6 +6,8 @@ module UIHelpers exposing (edges, mainBackgroundColour, mainForegroundColour, sh
 import Element exposing (Element)
 import Element.Background
 import Element.Border
+import Element.Font
+import Element.Input
 
 
 edges : { top : Int, right : Int, bottom : Int, left : Int }
@@ -31,19 +33,49 @@ mainForegroundColour =
     Element.rgb255 198 195 195
 
 
-showModal : Element msg -> Element msg
-showModal contents =
-    Element.el
+showModal : { onSubmit : msg, onCancel : msg, custom : List ( String, msg ) } -> Element msg -> Element msg
+showModal { onSubmit, onCancel, custom } contents =
+    let
+        extraButtons =
+            custom |> List.map (\( caption, onPress ) -> modalButton caption onPress)
+    in
+    Element.column
         [ Element.Background.color mainBackgroundColour
         , Element.Border.color mainForegroundColour
         , Element.Border.width 2
         , Element.centerX
         , Element.centerY
         , Element.padding 10
+        , Element.spacingXY 0 20
         , Element.Border.rounded 10
         ]
-        contents
+        [ contents
+        , Element.row [ Element.centerX, Element.spacingXY 10 0 ] <|
+            extraButtons
+                ++ [ modalButton "Save" onSubmit
+                   , modalButton "Cancel" onCancel
+                   ]
+        ]
         |> modalMask
+
+
+modalButton : String -> msg -> Element msg
+modalButton caption onPress =
+    Element.Input.button
+        [ Element.Background.color <| Element.rgb255 180 180 180 --mainBackgroundColour
+        , Element.Font.color mainBackgroundColour -- mainForegroundColour
+
+        -- , Element.Border.color mainForegroundColour
+        , Element.Border.width 1
+        , Element.Border.rounded 5
+        , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 1 ]
+        , Element.focused []
+        , Element.Font.size 15
+        , Element.Font.semiBold
+        ]
+        { onPress = Just onPress
+        , label = Element.el [ Element.paddingXY 5 3 ] (Element.text caption)
+        }
 
 
 modalMask : Element msg -> Element msg
