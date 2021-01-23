@@ -1,4 +1,4 @@
-module Settings exposing (KeyActions, Settings, fromJson, getKeyActions, keyboardDecoder)
+module Settings exposing (KeyActions, Settings, default, fromJson, getKeyActions, keyboardDecoder)
 
 {-| Contains all functionality to defining the settings (i.e. user preferences) such as keyboard bindings. Contains
 the JSON de/encoders and the types.
@@ -18,6 +18,11 @@ type Settings
 fromJson : JE.Value -> Settings
 fromJson json =
     -- TODO: read JSON from local storage and decode here
+    default
+
+
+default : Settings
+default =
     Settings
         { keyBindings =
             buildKeyBindings

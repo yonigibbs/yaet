@@ -64,14 +64,13 @@ modalButton caption onPress =
     Element.Input.button
         [ Element.Background.color <| Element.rgb255 180 180 180 --mainBackgroundColour
         , Element.Font.color mainBackgroundColour -- mainForegroundColour
-
-        -- , Element.Border.color mainForegroundColour
         , Element.Border.width 1
-        , Element.Border.rounded 5
+        , Element.Border.rounded 8
         , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 1 ]
         , Element.focused []
-        , Element.Font.size 15
+        , Element.Font.size 14
         , Element.Font.semiBold
+        , Element.paddingXY 2 2
         ]
         { onPress = Just onPress
         , label = Element.el [ Element.paddingXY 5 3 ] (Element.text caption)

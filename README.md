@@ -41,6 +41,7 @@ Current state: **WIP.**
 - [x] Add ability to pause game
 - [x] Fix issue where guidelines don't show for one frame after line removed
 - [ ] Settings/preferences, e.g. keyboard bindings (persisted to local storage)
+  - [ ] Let user close screen by pressing Escape key
 - [ ] Update terminology in code - use soft/hard drop, and proper shape names, etc
 - [ ] Scores
 - [ ] High scores (persisted to local storage)

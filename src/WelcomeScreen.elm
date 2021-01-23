@@ -1,4 +1,4 @@
-module WelcomeScreen exposing (Model, Msg, getSettings, init, subscriptions, update, view)
+module WelcomeScreen exposing (Model, Msg, UpdateResult(..), getSettings, init, subscriptions, update, view)
 
 {-| This module contains all functionality related to the welcome screen. Manages the animated board and functionality
 available from the Welcome screen, e.g. the Settings.
@@ -17,6 +17,7 @@ import HighlightAnimation
 import Random
 import Random.Array
 import Settings exposing (Settings)
+import SettingsScreen
 import Shape exposing (Shape)
 import Task
 import Time
@@ -90,7 +91,7 @@ type Model
 
 
 type alias ModelData =
-    { animatedBoard : AnimatedBoard, settings : Settings, showSettingsScreen : Bool }
+    { animatedBoard : AnimatedBoard, settings : Settings, settingsScreen : Maybe SettingsScreen.Model }
 
 
 {-| The state of the animated board on the Welcome screen. Defines the three stages of the animation, along with an
@@ -111,7 +112,7 @@ type AnimatedBoard
 
 init : Settings -> ( Model, Cmd Msg )
 init settings =
-    ( Model { animatedBoard = Initialising, settings = settings, showSettingsScreen = False }
+    ( Model { animatedBoard = Initialising, settings = settings, settingsScreen = Nothing }
     , Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised)
     )
 
@@ -126,51 +127,65 @@ type Msg
     | GotHighlightAnimationMsg HighlightAnimation.Msg -- A pulsing animation frame has occurred
     | ShapeDropDelayElapsed -- The delay between each time the dropping shapes are lowered a row has elapsed
     | ShowSettingsRequested -- The user has requested to see the Settings modal
-    | SettingsModalCancelled -- The user has clicked Cancel on the settings modal
-    | SettingsModalSaved -- The user has clicked Save on the settings modal
-    | DefaultSettingsRestored -- The user clicked the Restore Defaults button on the settings modal
+    | GotSettingsScreenMsg SettingsScreen.Msg -- The user has clicked Save on the settings modal
+    | StartGameRequested
 
 
-update : Msg -> Model -> Model
+type UpdateResult
+    = Stay
+    | StartGame
+
+
+update : Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
 update msg ((Model { animatedBoard }) as model) =
     case ( msg, animatedBoard ) of
         ( Initialised randomSeed, Initialising ) ->
-            model |> withAnimatedBoard (initDroppingLetters randomSeed |> DroppingLetters)
+            ( model |> withAnimatedBoard (initDroppingLetters randomSeed |> DroppingLetters)
+            , Cmd.none
+            , Stay
+            )
 
         ( Initialised _, _ ) ->
-            model
+            ( model, Cmd.none, Stay )
 
         ( LetterDropAnimationFrame, DroppingLetters data ) ->
-            model |> withAnimatedBoard (onLetterDropAnimationFrame data)
+            ( model |> withAnimatedBoard (onLetterDropAnimationFrame data)
+            , Cmd.none
+            , Stay
+            )
 
         ( LetterDropAnimationFrame, _ ) ->
-            model
+            ( model, Cmd.none, Stay )
 
         ( GotHighlightAnimationMsg highlightAnimationMsg, PulsingLetters data ) ->
-            model |> withAnimatedBoard (onPulsingLettersAnimationFrame animatedBoard highlightAnimationMsg data)
+            ( model |> withAnimatedBoard (onPulsingLettersAnimationFrame animatedBoard highlightAnimationMsg data)
+            , Cmd.none
+            , Stay
+            )
 
         ( GotHighlightAnimationMsg _, _ ) ->
-            model
+            ( model, Cmd.none, Stay )
 
         ( ShapeDropDelayElapsed, DroppingRandomShapes data ) ->
-            model |> withAnimatedBoard (handleShapeDropDelayElapsed data |> DroppingRandomShapes)
+            ( model |> withAnimatedBoard (handleShapeDropDelayElapsed data |> DroppingRandomShapes)
+            , Cmd.none
+            , Stay
+            )
 
         ( ShapeDropDelayElapsed, _ ) ->
-            model
+            ( model, Cmd.none, Stay )
 
         ( ShowSettingsRequested, _ ) ->
-            model |> withShowSettingsScreen True
+            ( showSettingsScreen model
+            , Cmd.none
+            , Stay
+            )
 
-        ( SettingsModalCancelled, _ ) ->
-            model |> withShowSettingsScreen False
+        ( GotSettingsScreenMsg subMsg, _ ) ->
+            handleSettingsScreenMsg subMsg model
 
-        ( SettingsModalSaved, _ ) ->
-            -- TODO: implement
-            model |> withShowSettingsScreen False
-
-        ( DefaultSettingsRestored, _ ) ->
-            -- TODO: implement
-            model
+        ( StartGameRequested, _ ) ->
+            ( model, Cmd.none, StartGame )
 
 
 withAnimatedBoard : AnimatedBoard -> Model -> Model
@@ -178,9 +193,32 @@ withAnimatedBoard animatedBoard (Model modelData) =
     Model { modelData | animatedBoard = animatedBoard }
 
 
-withShowSettingsScreen : Bool -> Model -> Model
-withShowSettingsScreen showSettingsScreen (Model modelData) =
-    Model { modelData | showSettingsScreen = showSettingsScreen }
+showSettingsScreen : Model -> Model
+showSettingsScreen (Model ({ settings } as modelData)) =
+    Model { modelData | settingsScreen = Just <| SettingsScreen.init settings }
+
+
+handleSettingsScreenMsg : SettingsScreen.Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
+handleSettingsScreenMsg settingsMsg ((Model modelData) as model) =
+    case modelData.settingsScreen of
+        Just settingsScreen ->
+            let
+                ( settingsModel, settingsCmd, settingsUpdateResult ) =
+                    SettingsScreen.update settingsMsg settingsScreen
+
+                nextModelData =
+                    case settingsUpdateResult of
+                        SettingsScreen.KeepOpen ->
+                            { modelData | settingsScreen = Just settingsModel }
+
+                        SettingsScreen.Close maybeNewSettings ->
+                            -- Close settings screen, possibly updating the settings
+                            { modelData | settings = maybeNewSettings |> Maybe.withDefault modelData.settings, settingsScreen = Nothing }
+            in
+            ( Model nextModelData, Cmd.map GotSettingsScreenMsg settingsCmd, Stay )
+
+        Nothing ->
+            ( model, Cmd.none, Stay )
 
 
 {-| Gets the initial state of the `DroppingLetters` state of the screen. Gets all the letters ready to drop, along with
@@ -365,8 +403,8 @@ rotateXTimes turns shape =
 -- VIEW: COMMON
 
 
-view : Model -> msg -> (Msg -> msg) -> Element msg
-view (Model { animatedBoard, settings, showSettingsScreen }) startGameMsg mapMessage =
+view : Model -> Element Msg
+view (Model { animatedBoard, settings, settingsScreen }) =
     let
         ( letters_, maybeAnimation, droppingShapes_ ) =
             case animatedBoard of
@@ -391,11 +429,15 @@ view (Model { animatedBoard, settings, showSettingsScreen }) startGameMsg mapMes
                 |> BoardView.withOpacity 0.5
 
         modalAttr =
-            if showSettingsScreen then
-                [ Element.inFront <| settingsModal settings mapMessage ]
+            case settingsScreen of
+                Just settingsScreenModel ->
+                    [ SettingsScreen.view settingsScreenModel
+                        |> Element.map GotSettingsScreenMsg
+                        |> Element.inFront
+                    ]
 
-            else
-                []
+                Nothing ->
+                    []
     in
     Element.column
         ([ Element.spacingXY 0 25
@@ -406,14 +448,14 @@ view (Model { animatedBoard, settings, showSettingsScreen }) startGameMsg mapMes
         )
         [ Element.el [ Element.centerX ] <| BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
         , Element.row [ Element.centerX, Element.spacingXY 20 0 ]
-            [ bigButton "Start Game" startGameMsg
-            , bigButton "Settings" (mapMessage ShowSettingsRequested)
+            [ button "Start Game" StartGameRequested
+            , button "Settings" ShowSettingsRequested
             ]
         ]
 
 
-bigButton : String -> msg -> Element msg
-bigButton caption msg =
+button : String -> msg -> Element msg
+button caption msg =
     Element.Input.button
         [ Element.Background.color UIHelpers.mainBackgroundColour
         , Element.Font.color UIHelpers.mainForegroundColour
@@ -426,79 +468,6 @@ bigButton caption msg =
         { onPress = Just msg
         , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)
         }
-
-
-
--- VIEW: SETTINGS
-
-
-settingsModal : Settings -> (Msg -> msg) -> Element msg
-settingsModal settings mapMessage =
-    Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
-        [ Element.el [ Element.centerX, Element.Font.bold, Element.paddingEach { edges | bottom = 15 } ]
-            (Element.el [ Element.Font.size 24 ] <| Element.text "Settings")
-        , keyBindingsTable settings
-        ]
-        |> Element.el []
-        |> UIHelpers.showModal
-            { onSubmit = SettingsModalSaved |> mapMessage
-            , onCancel = SettingsModalCancelled |> mapMessage
-            , custom = [ ( "Restore Defaults", DefaultSettingsRestored |> mapMessage ) ]
-            }
-
-
-keyBindingsTable : Settings -> Element msg
-keyBindingsTable settings =
-    let
-        keyActions =
-            Settings.getKeyActions settings
-
-        records =
-            [ ( keyActions.moveLeft, "Move left" )
-            , ( keyActions.moveRight, "Move right" )
-            , ( keyActions.rotateClockwise, "Rotate clockwise" )
-            , ( keyActions.rotateAnticlockwise, "Rotate anticlockwise" )
-            , ( keyActions.dropOneRow, "Soft drop" )
-            , ( keyActions.dropToBottom, "Hard drop" )
-            , ( keyActions.hold, "Hold" )
-            , ( keyActions.togglePause, "Pause" )
-            ]
-
-        column caption contents =
-            { header = Element.el [ Element.Font.size 16, Element.Font.bold, Element.paddingXY 0 4 ] <| Element.text caption
-            , width = Element.fill
-            , view = \record -> Element.el [ Element.Font.size 14, Element.Font.semiBold ] <| contents record
-            }
-    in
-    Element.table [ Element.spacingXY 25 5 ]
-        { data = records
-        , columns =
-            [ column "Action" <| \( _, descr ) -> Element.text descr
-            , column "Key" <| \( key, _ ) -> keyDescription key |> Element.text
-            ]
-        }
-
-
-keyDescription : String -> String
-keyDescription key =
-    case key of
-        " " ->
-            "Space"
-
-        "ArrowLeft" ->
-            "Left arrow"
-
-        "ArrowRight" ->
-            "Right arrow"
-
-        "ArrowDown" ->
-            "Down arrow"
-
-        "ArrowUp" ->
-            "Up arrow"
-
-        _ ->
-            String.toUpper key
 
 
 

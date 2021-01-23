@@ -76,8 +76,7 @@ type Model
 
 
 type Msg
-    = StartGameRequested -- User asked to start the game
-    | GotWelcomeScreenMsg WelcomeScreen.Msg
+    = GotWelcomeScreenMsg WelcomeScreen.Msg
     | GotPlayingGameMsg UserGame.Msg
     | GotGameOverMsg GameOver.Msg
 
@@ -89,51 +88,69 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model, msg ) of
-        ( Welcome welcome, StartGameRequested ) ->
-            WelcomeScreen.getSettings welcome.model
-                |> UserGame.init
-                |> (\( subModel, subCmd ) ->
-                        ( Playing { model = subModel, highScores = welcome.highScores }
-                        , Cmd.map GotPlayingGameMsg subCmd
-                        )
-                   )
-
-        ( _, StartGameRequested ) ->
-            ( model, Cmd.none )
-
-        ( Welcome welcome, GotWelcomeScreenMsg subMsg ) ->
-            ( Welcome { welcome | model = WelcomeScreen.update subMsg welcome.model }
-            , Cmd.none
-            )
+        ( Welcome welcome, GotWelcomeScreenMsg welcomeMsg ) ->
+            handleWelcomeScreenMsg welcomeMsg welcome
 
         ( _, GotWelcomeScreenMsg _ ) ->
             ( model, Cmd.none )
 
-        ( Playing playing, GotPlayingGameMsg subMsg ) ->
-            case UserGame.update subMsg playing.model of
-                UserGame.Continue ( subModel, subCmd ) ->
-                    ( Playing { playing | model = subModel }
-                    , Cmd.map GotPlayingGameMsg subCmd
-                    )
-
-                UserGame.GameOver game ->
-                    ( GameOver { model = GameOver.init playing.highScores game, settings = UserGame.getSettings playing.model }
-                    , Cmd.none
-                    )
+        ( Playing playing, GotPlayingGameMsg playingMsg ) ->
+            handlePlayingGameMsg playingMsg playing
 
         ( _, GotPlayingGameMsg _ ) ->
             ( model, Cmd.none )
 
-        ( GameOver gameOver, GotGameOverMsg subMsg ) ->
-            case GameOver.update subMsg gameOver.model of
-                GameOver.Continue subModel ->
-                    ( GameOver { gameOver | model = subModel }, Cmd.none )
-
-                GameOver.Done ->
-                    initAtWelcomeScreen (GameOver.getHighScores gameOver.model) gameOver.settings
+        ( GameOver gameOver, GotGameOverMsg gameOverMsg ) ->
+            handleGameOverMsg gameOverMsg gameOver
 
         ( _, GotGameOverMsg _ ) ->
             ( model, Cmd.none )
+
+
+handleWelcomeScreenMsg : WelcomeScreen.Msg -> { model : WelcomeScreen.Model, highScores : HighScores } -> ( Model, Cmd Msg )
+handleWelcomeScreenMsg welcomeMsg welcome =
+    let
+        ( welcomeModel, welcomeCmd, welcomeUpdateResult ) =
+            WelcomeScreen.update welcomeMsg welcome.model
+    in
+    case welcomeUpdateResult of
+        WelcomeScreen.Stay ->
+            ( Welcome { welcome | model = welcomeModel }
+            , Cmd.map GotWelcomeScreenMsg welcomeCmd
+            )
+
+        WelcomeScreen.StartGame ->
+            WelcomeScreen.getSettings welcomeModel
+                |> UserGame.init
+                |> (\( gameModel, gameCmd ) ->
+                        ( Playing { model = gameModel, highScores = welcome.highScores }
+                        , Cmd.map GotPlayingGameMsg gameCmd
+                        )
+                   )
+
+
+handlePlayingGameMsg : UserGame.Msg -> { model : UserGame.Model, highScores : HighScores } -> ( Model, Cmd Msg )
+handlePlayingGameMsg gameMsg playing =
+    case UserGame.update gameMsg playing.model of
+        UserGame.Continue ( subModel, subCmd ) ->
+            ( Playing { playing | model = subModel }
+            , Cmd.map GotPlayingGameMsg subCmd
+            )
+
+        UserGame.GameOver game ->
+            ( GameOver { model = GameOver.init playing.highScores game, settings = UserGame.getSettings playing.model }
+            , Cmd.none
+            )
+
+
+handleGameOverMsg : GameOver.Msg -> { model : GameOver.Model, settings : Settings } -> ( Model, Cmd Msg )
+handleGameOverMsg gameOverMsg gameOver =
+    case GameOver.update gameOverMsg gameOver.model of
+        GameOver.Continue subModel ->
+            ( GameOver { gameOver | model = subModel }, Cmd.none )
+
+        GameOver.Done ->
+            initAtWelcomeScreen (GameOver.getHighScores gameOver.model) gameOver.settings
 
 
 
@@ -147,7 +164,7 @@ view model =
         contents =
             case model of
                 Welcome welcome ->
-                    WelcomeScreen.view welcome.model StartGameRequested GotWelcomeScreenMsg
+                    WelcomeScreen.view welcome.model |> Element.map GotWelcomeScreenMsg
 
                 Playing playing ->
                     UserGame.view playing.model |> Element.map GotPlayingGameMsg |> wrapBoardView
@@ -169,11 +186,7 @@ view model =
 
 wrapBoardView : Element msg -> Element msg
 wrapBoardView boardView =
-    Element.column [ Element.paddingEach { edges | top = 25 } ] [ boardView ]
-
-
-
--- SUBSCRIPTIONS
+    Element.el [ Element.centerX, Element.paddingEach { edges | top = 25 } ] boardView
 
 
 subscriptions : Model -> Sub Msg
