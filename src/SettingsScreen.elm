@@ -2,6 +2,8 @@ module SettingsScreen exposing (Model, Msg, UpdateResult(..), init, update, view
 
 import Element exposing (Element)
 import Element.Font
+import Element.Input
+import Game
 import Settings exposing (Settings)
 import UIHelpers exposing (edges)
 
@@ -16,7 +18,7 @@ type Model
 
 type Screen
     = SettingsScreen
-    | KeySelectionScreen
+    | KeySelectionScreen { action : Game.UserAction, key : String }
 
 
 type alias ModelData =
@@ -36,6 +38,7 @@ type Msg
     = DefaultSettingsRestored
     | SaveRequested
     | Cancelled
+    | ChangeKeyBindingRequested Game.UserAction
 
 
 type UpdateResult
@@ -44,10 +47,10 @@ type UpdateResult
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
-update msg ((Model { settings }) as model) =
+update msg ((Model ({ settings } as modelData)) as model) =
     case msg of
         DefaultSettingsRestored ->
-            ( model |> withSettings Settings.default, Cmd.none, KeepOpen )
+            ( Model { modelData | settings = Settings.default }, Cmd.none, KeepOpen )
 
         SaveRequested ->
             -- TODO: implement saving to local storage
@@ -56,10 +59,11 @@ update msg ((Model { settings }) as model) =
         Cancelled ->
             ( model, Cmd.none, Close Nothing )
 
-
-withSettings : Settings -> Model -> Model
-withSettings settings (Model modelData) =
-    Model { modelData | settings = settings }
+        ChangeKeyBindingRequested action ->
+            ( Model { modelData | screen = KeySelectionScreen { action = action, key = Settings.keyBinding settings action } }
+            , Cmd.none
+            , KeepOpen
+            )
 
 
 
@@ -67,10 +71,22 @@ withSettings settings (Model modelData) =
 
 
 view : Model -> Element Msg
-view (Model { settings }) =
+view (Model { settings, screen }) =
+    case screen of
+        SettingsScreen ->
+            settingsView settings
+
+        KeySelectionScreen { action, key } ->
+            keySelectionView action key
+
+
+settingsView : Settings -> Element Msg
+settingsView settings =
     Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
-        [ Element.el [ Element.centerX, Element.Font.bold, Element.paddingEach { edges | bottom = 15 } ]
-            (Element.el [ Element.Font.size 24 ] <| Element.text "Settings")
+        [ Element.el
+            [ Element.centerX, Element.Font.bold, Element.Font.size 24, Element.paddingEach { edges | bottom = 15 } ]
+          <|
+            Element.text "Settings"
         , keyBindingsTable settings
         ]
         |> Element.el []
@@ -81,34 +97,45 @@ view (Model { settings }) =
             }
 
 
-keyBindingsTable : Settings -> Element msg
+keySelectionView : Game.UserAction -> String -> Element Msg
+keySelectionView action key =
+    let
+        caption =
+            "Press the key to use to " ++ (Game.userActionDescription action |> String.toLower)
+    in
+    Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
+        [ Element.el [ Element.centerX, Element.paddingEach { edges | bottom = 15 } ] <|
+            Element.text caption
+        ]
+        |> Element.el []
+        |> UIHelpers.showModal
+            { onSubmit = SaveRequested
+            , onCancel = Cancelled
+            , custom = [ ( "Restore Defaults", DefaultSettingsRestored ) ]
+            }
+
+
+keyBindingsTable : Settings -> Element Msg
 keyBindingsTable settings =
     let
-        keyActions =
-            Settings.getKeyActions settings
-
-        records =
-            [ ( keyActions.moveLeft, "Move left" )
-            , ( keyActions.moveRight, "Move right" )
-            , ( keyActions.rotateClockwise, "Rotate clockwise" )
-            , ( keyActions.rotateAnticlockwise, "Rotate anticlockwise" )
-            , ( keyActions.dropOneRow, "Soft drop" )
-            , ( keyActions.dropToBottom, "Hard drop" )
-            , ( keyActions.hold, "Hold" )
-            , ( keyActions.togglePause, "Pause" )
-            ]
+        keyBindings =
+            Settings.allKeyBindings settings
 
         column caption contents =
             { header = Element.el [ Element.Font.size 16, Element.Font.bold, Element.paddingXY 0 4 ] <| Element.text caption
-            , width = Element.fill
+            , width = Element.shrink
             , view = \record -> Element.el [ Element.Font.size 14, Element.Font.semiBold ] <| contents record
             }
     in
     Element.table [ Element.spacingXY 25 5 ]
-        { data = records
+        { data = keyBindings
         , columns =
-            [ column "Action" <| \( _, descr ) -> Element.text descr
-            , column "Key" <| \( key, _ ) -> keyDescription key |> Element.text
+            [ column "Action" <| \{ action } -> Game.userActionDescription action |> Element.text
+            , column "Key" <|
+                \{ action, key } ->
+                    -- TODO: add underlines on hover
+                    Element.Input.button []
+                        { onPress = Just <| ChangeKeyBindingRequested action, label = Element.text <| keyDescription key }
             ]
         }
 

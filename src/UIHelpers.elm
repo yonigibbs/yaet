@@ -1,4 +1,4 @@
-module UIHelpers exposing (edges, mainBackgroundColour, mainForegroundColour, showModal)
+module UIHelpers exposing (edges, hijackOn, mainBackgroundColour, mainForegroundColour, showModal)
 
 {-| Miscellaneous helper functions related to the UI/rendering.
 -}
@@ -8,6 +8,9 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
+import Html
+import Html.Events
+import Json.Decode as JD
 
 
 edges : { top : Int, right : Int, bottom : Int, left : Int }
@@ -50,9 +53,9 @@ showModal { onSubmit, onCancel, custom } contents =
         , Element.Border.rounded 10
         ]
         [ contents
-        , Element.row [ Element.centerX, Element.spacingXY 10 0 ] <|
+        , Element.row [ Element.spacingXY 10 0 ] <|
             extraButtons
-                ++ [ modalButton "Save" onSubmit
+                ++ [ modalButton "OK" onSubmit
                    , modalButton "Cancel" onCancel
                    ]
         ]
@@ -70,7 +73,7 @@ modalButton caption onPress =
         , Element.focused []
         , Element.Font.size 14
         , Element.Font.semiBold
-        , Element.paddingXY 2 2
+        , Element.paddingXY 2 1
         ]
         { onPress = Just onPress
         , label = Element.el [ Element.paddingXY 5 3 ] (Element.text caption)
@@ -87,3 +90,15 @@ modalMask contents =
         , Element.inFront contents
         ]
         Element.none
+
+
+{-| Hijacks an event by hooking into it and "preventing default" on it.
+-}
+hijackOn : String -> JD.Decoder msg -> Html.Attribute msg
+hijackOn event decoder =
+    Html.Events.preventDefaultOn event (JD.map hijack decoder)
+
+
+hijack : msg -> ( msg, Bool )
+hijack msg =
+    ( msg, True )

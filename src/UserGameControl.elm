@@ -16,7 +16,6 @@ every time it occurs, means that the keyboard press should be processed again.
 -}
 
 import Browser.Events
-import Dict exposing (Dict)
 import Game
 import Json.Decode as JD
 import Settings exposing (Settings)

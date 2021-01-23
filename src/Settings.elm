@@ -1,4 +1,4 @@
-module Settings exposing (KeyActions, Settings, default, fromJson, getKeyActions, keyboardDecoder)
+module Settings exposing (Settings, allKeyBindings, default, fromJson, keyBinding, keyboardDecoder)
 
 {-| Contains all functionality to defining the settings (i.e. user preferences) such as keyboard bindings. Contains
 the JSON de/encoders and the types.
@@ -96,6 +96,42 @@ keyboardDecoder (Settings { keyBindings }) =
             )
 
 
-getKeyActions : Settings -> KeyActions
-getKeyActions (Settings { keyBindings }) =
-    keyBindings.keyActions
+allKeyBindings : Settings -> List { action : Game.UserAction, key : String }
+allKeyBindings (Settings { keyBindings }) =
+    [ { action = Game.Move Game.Left, key = keyBindings.keyActions.moveLeft }
+    , { action = Game.Move Game.Right, key = keyBindings.keyActions.moveRight }
+    , { action = Game.Move Game.Down, key = keyBindings.keyActions.dropOneRow }
+    , { action = Game.DropToBottom, key = keyBindings.keyActions.dropToBottom }
+    , { action = Game.Rotate Shape.Clockwise, key = keyBindings.keyActions.rotateClockwise }
+    , { action = Game.Rotate Shape.Anticlockwise, key = keyBindings.keyActions.rotateAnticlockwise }
+    , { action = Game.Hold, key = keyBindings.keyActions.hold }
+    , { action = Game.TogglePause, key = keyBindings.keyActions.togglePause }
+    ]
+
+
+keyBinding : Settings -> Game.UserAction -> String
+keyBinding (Settings { keyBindings }) action =
+    case action of
+        Game.Move Game.Left ->
+            keyBindings.keyActions.moveLeft
+
+        Game.Move Game.Right ->
+            keyBindings.keyActions.moveRight
+
+        Game.Move Game.Down ->
+            keyBindings.keyActions.dropOneRow
+
+        Game.DropToBottom ->
+            keyBindings.keyActions.dropToBottom
+
+        Game.Rotate Shape.Clockwise ->
+            keyBindings.keyActions.rotateClockwise
+
+        Game.Rotate Shape.Anticlockwise ->
+            keyBindings.keyActions.rotateAnticlockwise
+
+        Game.Hold ->
+            keyBindings.keyActions.hold
+
+        Game.TogglePause ->
+            keyBindings.keyActions.togglePause
