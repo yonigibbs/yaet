@@ -1,10 +1,11 @@
 module SettingsScreen exposing (Model, Msg, UpdateResult(..), init, update, view)
 
 import Element exposing (Element)
+import Element.Border
 import Element.Font
 import Element.Input
 import Game
-import Settings exposing (Settings)
+import Settings exposing (EditableSettings, Settings)
 import UIHelpers exposing (edges)
 
 
@@ -18,16 +19,16 @@ type Model
 
 type Screen
     = SettingsScreen
-    | KeySelectionScreen { action : Game.UserAction, key : String }
+    | KeySelectionScreen { action : Game.UserAction, key : Maybe String }
 
 
 type alias ModelData =
-    { settings : Settings, screen : Screen }
+    { editableSettings : EditableSettings, screen : Screen, settingsToPersist : Maybe Settings }
 
 
 init : Settings -> Model
 init settings =
-    Model { settings = settings, screen = SettingsScreen }
+    Model { editableSettings = Settings.toEditable settings, screen = SettingsScreen, settingsToPersist = Just settings }
 
 
 
@@ -35,10 +36,10 @@ init settings =
 
 
 type Msg
-    = DefaultSettingsRestored
+    = RestoreDefaultSettingsRequested
     | SaveRequested
     | Cancelled
-    | ChangeKeyBindingRequested Game.UserAction
+    | KeySelectionScreenRequested Game.UserAction
 
 
 type UpdateResult
@@ -47,23 +48,64 @@ type UpdateResult
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
-update msg ((Model ({ settings } as modelData)) as model) =
-    case msg of
-        DefaultSettingsRestored ->
-            ( Model { modelData | settings = Settings.default }, Cmd.none, KeepOpen )
-
-        SaveRequested ->
-            -- TODO: implement saving to local storage
-            ( model, Cmd.none, Close <| Just settings )
-
-        Cancelled ->
-            ( model, Cmd.none, Close Nothing )
-
-        ChangeKeyBindingRequested action ->
-            ( Model { modelData | screen = KeySelectionScreen { action = action, key = Settings.keyBinding settings action } }
+update msg ((Model ({ editableSettings, screen } as modelData)) as model) =
+    let
+        ignore =
+            ( model, Cmd.none, KeepOpen )
+    in
+    case ( msg, screen ) of
+        ( RestoreDefaultSettingsRequested, SettingsScreen ) ->
+            ( Model
+                { modelData
+                    | editableSettings = Settings.toEditable Settings.default
+                    , settingsToPersist = Just Settings.default
+                }
             , Cmd.none
             , KeepOpen
             )
+
+        ( RestoreDefaultSettingsRequested, KeySelectionScreen _ ) ->
+            ignore
+
+        ( SaveRequested, SettingsScreen ) ->
+            -- TODO: implement saving to local storage, and converting the EditableSettings back to Settings
+            ( model, Cmd.none, Close Nothing )
+
+        ( SaveRequested, KeySelectionScreen { action, key } ) ->
+            let
+                ( newEditableSettings, newSettingsToPersist ) =
+                    case key of
+                        Just key_ ->
+                            Settings.withKeyBinding action key_ editableSettings
+                                |> (\newEditableSettings_ -> ( newEditableSettings_, Settings.fromEditable newEditableSettings_ ))
+
+                        Nothing ->
+                            ( modelData.editableSettings, modelData.settingsToPersist )
+            in
+            ( Model
+                { modelData
+                    | editableSettings = newEditableSettings
+                    , screen = SettingsScreen
+                    , settingsToPersist = newSettingsToPersist
+                }
+            , Cmd.none
+            , KeepOpen
+            )
+
+        ( Cancelled, SettingsScreen ) ->
+            ( model, Cmd.none, Close Nothing )
+
+        ( Cancelled, KeySelectionScreen _ ) ->
+            ( Model { modelData | screen = SettingsScreen }, Cmd.none, KeepOpen )
+
+        ( KeySelectionScreenRequested action, SettingsScreen ) ->
+            ( Model { modelData | screen = KeySelectionScreen { action = action, key = Settings.keyBinding action editableSettings } }
+            , Cmd.none
+            , KeepOpen
+            )
+
+        ( KeySelectionScreenRequested _, KeySelectionScreen _ ) ->
+            ignore
 
 
 
@@ -71,51 +113,48 @@ update msg ((Model ({ settings } as modelData)) as model) =
 
 
 view : Model -> Element Msg
-view (Model { settings, screen }) =
+view ((Model { editableSettings, screen, settingsToPersist }) as model) =
     case screen of
         SettingsScreen ->
-            settingsView settings
+            settingsView editableSettings settingsToPersist
 
         KeySelectionScreen { action, key } ->
             keySelectionView action key
 
 
-settingsView : Settings -> Element Msg
-settingsView settings =
+settingsView : EditableSettings -> Maybe Settings -> Element Msg
+settingsView editableSettings settingsToPersist =
     Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
         [ Element.el
             [ Element.centerX, Element.Font.bold, Element.Font.size 24, Element.paddingEach { edges | bottom = 15 } ]
           <|
             Element.text "Settings"
-        , keyBindingsTable settings
+        , keyBindingsTable editableSettings
         ]
         |> Element.el []
         |> UIHelpers.showModal
-            { onSubmit = SaveRequested
+            { onSubmit = Maybe.map (always SaveRequested) settingsToPersist
             , onCancel = Cancelled
-            , custom = [ ( "Restore Defaults", DefaultSettingsRestored ) ]
+            , custom = [ ( "Restore Defaults", RestoreDefaultSettingsRequested ) ]
             }
 
 
-keySelectionView : Game.UserAction -> String -> Element Msg
+keySelectionView : Game.UserAction -> Maybe String -> Element Msg
 keySelectionView action key =
     let
         caption =
             "Press the key to use to " ++ (Game.userActionDescription action |> String.toLower)
     in
     Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
-        [ Element.el [ Element.centerX, Element.paddingEach { edges | bottom = 15 } ] <|
+        [ Element.el [ Element.centerX, Element.paddingEach { edges | bottom = 15 }, Element.Font.semiBold, Element.Font.size 16 ] <|
             Element.text caption
+        , Element.el [ Element.centerX, Element.Font.bold, Element.Font.size 22 ] <| Element.text (keyDescription key)
         ]
         |> Element.el []
-        |> UIHelpers.showModal
-            { onSubmit = SaveRequested
-            , onCancel = Cancelled
-            , custom = [ ( "Restore Defaults", DefaultSettingsRestored ) ]
-            }
+        |> UIHelpers.showModal { onSubmit = Maybe.map (always SaveRequested) key, onCancel = Cancelled, custom = [] }
 
 
-keyBindingsTable : Settings -> Element Msg
+keyBindingsTable : EditableSettings -> Element Msg
 keyBindingsTable settings =
     let
         keyBindings =
@@ -134,29 +173,37 @@ keyBindingsTable settings =
             , column "Key" <|
                 \{ action, key } ->
                     -- TODO: add underlines on hover
-                    Element.Input.button []
-                        { onPress = Just <| ChangeKeyBindingRequested action, label = Element.text <| keyDescription key }
+                    Element.Input.button
+                        [ Element.Border.widthEach { bottom = 1, left = 0, right = 0, top = 0 }
+                        , Element.Border.color UIHelpers.mainBackgroundColour
+                        , Element.mouseOver [ Element.Border.color UIHelpers.mainForegroundColour ]
+                        , Element.focused []
+                        ]
+                        { onPress = Just <| KeySelectionScreenRequested action, label = Element.text <| keyDescription key }
             ]
         }
 
 
-keyDescription : String -> String
+keyDescription : Maybe String -> String
 keyDescription key =
     case key of
-        " " ->
+        Nothing ->
+            "<not set>"
+
+        Just " " ->
             "Space"
 
-        "ArrowLeft" ->
+        Just "arrowleft" ->
             "Left arrow"
 
-        "ArrowRight" ->
+        Just "arrowright" ->
             "Right arrow"
 
-        "ArrowDown" ->
+        Just "arrowdown" ->
             "Down arrow"
 
-        "ArrowUp" ->
+        Just "arrowup" ->
             "Up arrow"
 
-        _ ->
-            String.toUpper key
+        Just k ->
+            String.toUpper k

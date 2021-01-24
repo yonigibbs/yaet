@@ -36,11 +36,11 @@ mainForegroundColour =
     Element.rgb255 198 195 195
 
 
-showModal : { onSubmit : msg, onCancel : msg, custom : List ( String, msg ) } -> Element msg -> Element msg
+showModal : { onSubmit : Maybe msg, onCancel : msg, custom : List ( String, msg ) } -> Element msg -> Element msg
 showModal { onSubmit, onCancel, custom } contents =
     let
         extraButtons =
-            custom |> List.map (\( caption, onPress ) -> modalButton caption onPress)
+            custom |> List.map (\( caption, onPress ) -> modalButton caption (Just onPress))
     in
     Element.column
         [ Element.Background.color mainBackgroundColour
@@ -53,20 +53,20 @@ showModal { onSubmit, onCancel, custom } contents =
         , Element.Border.rounded 10
         ]
         [ contents
-        , Element.row [ Element.spacingXY 10 0 ] <|
+        , Element.row [ Element.spacingXY 10 0, Element.centerX ] <|
             extraButtons
                 ++ [ modalButton "OK" onSubmit
-                   , modalButton "Cancel" onCancel
+                   , modalButton "Cancel" (Just onCancel)
                    ]
         ]
         |> modalMask
 
 
-modalButton : String -> msg -> Element msg
+modalButton : String -> Maybe msg -> Element msg
 modalButton caption onPress =
     Element.Input.button
-        [ Element.Background.color <| Element.rgb255 180 180 180 --mainBackgroundColour
-        , Element.Font.color mainBackgroundColour -- mainForegroundColour
+        [ Element.Background.color <| Element.rgb255 180 180 180
+        , Element.Font.color mainBackgroundColour
         , Element.Border.width 1
         , Element.Border.rounded 8
         , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 1 ]
@@ -75,7 +75,7 @@ modalButton caption onPress =
         , Element.Font.semiBold
         , Element.paddingXY 2 1
         ]
-        { onPress = Just onPress
+        { onPress = onPress
         , label = Element.el [ Element.paddingXY 5 3 ] (Element.text caption)
         }
 

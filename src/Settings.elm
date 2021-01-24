@@ -1,9 +1,10 @@
-module Settings exposing (Settings, allKeyBindings, default, fromJson, keyBinding, keyboardDecoder)
+module Settings exposing (EditableSettings, Settings, allKeyBindings, default, fromEditable, fromJson, keyBinding, keyboardDecoder, toEditable, withKeyBinding)
 
 {-| Contains all functionality to defining the settings (i.e. user preferences) such as keyboard bindings. Contains
 the JSON de/encoders and the types.
 -}
 
+import AssocList
 import Dict exposing (Dict)
 import Game
 import Json.Decode as JD
@@ -12,7 +13,7 @@ import Shape
 
 
 type Settings
-    = Settings { keyBindings : KeyBindings }
+    = Settings { keyBindings : Dict String Game.UserAction }
 
 
 fromJson : JE.Value -> Settings
@@ -42,7 +43,9 @@ default =
 -- KEY BINDINGS
 
 
-type alias KeyActions =
+{-| Builds a `KeyBindings` value from the supplied values.
+-}
+buildKeyBindings :
     { moveLeft : String
     , moveRight : String
     , dropOneRow : String
@@ -52,31 +55,18 @@ type alias KeyActions =
     , hold : String
     , togglePause : String
     }
-
-
-{-| The configuration of the keyboard keys, mapping them to their corresponding user actions.
--}
-type alias KeyBindings =
-    { keyActions : KeyActions, dict : Dict String Game.UserAction }
-
-
-{-| Builds a `KeyBindings` value from the supplied values.
--}
-buildKeyBindings : KeyActions -> KeyBindings
-buildKeyBindings ({ moveLeft, moveRight, dropOneRow, dropToBottom, rotateClockwise, rotateAnticlockwise, hold, togglePause } as keyActions) =
-    { keyActions = keyActions
-    , dict =
-        Dict.fromList
-            [ ( String.toLower moveLeft, Game.Move Game.Left )
-            , ( String.toLower moveRight, Game.Move Game.Right )
-            , ( String.toLower dropOneRow, Game.Move Game.Down )
-            , ( String.toLower dropToBottom, Game.DropToBottom )
-            , ( String.toLower rotateClockwise, Game.Rotate Shape.Clockwise )
-            , ( String.toLower rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
-            , ( String.toLower hold, Game.Hold )
-            , ( String.toLower togglePause, Game.TogglePause )
-            ]
-    }
+    -> Dict String Game.UserAction
+buildKeyBindings { moveLeft, moveRight, dropOneRow, dropToBottom, rotateClockwise, rotateAnticlockwise, hold, togglePause } =
+    Dict.fromList
+        [ ( String.toLower moveLeft, Game.Move Game.Left )
+        , ( String.toLower moveRight, Game.Move Game.Right )
+        , ( String.toLower dropOneRow, Game.Move Game.Down )
+        , ( String.toLower dropToBottom, Game.DropToBottom )
+        , ( String.toLower rotateClockwise, Game.Rotate Shape.Clockwise )
+        , ( String.toLower rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
+        , ( String.toLower hold, Game.Hold )
+        , ( String.toLower togglePause, Game.TogglePause )
+        ]
 
 
 {-| Decodes a key event, succeeding if it's one of the special keys we handle (as defined in the supplied `config`),
@@ -87,7 +77,7 @@ keyboardDecoder (Settings { keyBindings }) =
     JD.field "key" JD.string
         |> JD.andThen
             (\key ->
-                case Dict.get (String.toLower key) keyBindings.dict of
+                case Dict.get (String.toLower key) keyBindings of
                     Just action ->
                         JD.succeed action
 
@@ -96,42 +86,61 @@ keyboardDecoder (Settings { keyBindings }) =
             )
 
 
-allKeyBindings : Settings -> List { action : Game.UserAction, key : String }
-allKeyBindings (Settings { keyBindings }) =
-    [ { action = Game.Move Game.Left, key = keyBindings.keyActions.moveLeft }
-    , { action = Game.Move Game.Right, key = keyBindings.keyActions.moveRight }
-    , { action = Game.Move Game.Down, key = keyBindings.keyActions.dropOneRow }
-    , { action = Game.DropToBottom, key = keyBindings.keyActions.dropToBottom }
-    , { action = Game.Rotate Shape.Clockwise, key = keyBindings.keyActions.rotateClockwise }
-    , { action = Game.Rotate Shape.Anticlockwise, key = keyBindings.keyActions.rotateAnticlockwise }
-    , { action = Game.Hold, key = keyBindings.keyActions.hold }
-    , { action = Game.TogglePause, key = keyBindings.keyActions.togglePause }
+
+-- EDITABLE SETTINGS
+
+
+type EditableSettings
+    = EditableSettings { keyBindings : AssocList.Dict Game.UserAction String }
+
+
+allActionsOrdered : List Game.UserAction
+allActionsOrdered =
+    [ Game.Move Game.Left
+    , Game.Move Game.Right
+    , Game.Move Game.Down
+    , Game.DropToBottom
+    , Game.Rotate Shape.Clockwise
+    , Game.Rotate Shape.Anticlockwise
+    , Game.Hold
+    , Game.TogglePause
     ]
 
 
-keyBinding : Settings -> Game.UserAction -> String
-keyBinding (Settings { keyBindings }) action =
-    case action of
-        Game.Move Game.Left ->
-            keyBindings.keyActions.moveLeft
+toEditable : Settings -> EditableSettings
+toEditable (Settings { keyBindings }) =
+    EditableSettings
+        { keyBindings =
+            keyBindings
+                |> Dict.foldl
+                    (\key action acc -> AssocList.insert action key acc)
+                    AssocList.empty
+        }
 
-        Game.Move Game.Right ->
-            keyBindings.keyActions.moveRight
 
-        Game.Move Game.Down ->
-            keyBindings.keyActions.dropOneRow
+fromEditable : EditableSettings -> Maybe Settings
+fromEditable (EditableSettings { keyBindings }) =
+    if AssocList.size keyBindings == List.length allActionsOrdered then
+        keyBindings
+            |> AssocList.foldl (\action key acc -> Dict.insert key action acc) Dict.empty
+            |> (\fullKeyBindings -> Settings { keyBindings = fullKeyBindings })
+            |> Just
 
-        Game.DropToBottom ->
-            keyBindings.keyActions.dropToBottom
+    else
+        Nothing
 
-        Game.Rotate Shape.Clockwise ->
-            keyBindings.keyActions.rotateClockwise
 
-        Game.Rotate Shape.Anticlockwise ->
-            keyBindings.keyActions.rotateAnticlockwise
+allKeyBindings : EditableSettings -> List { action : Game.UserAction, key : Maybe String }
+allKeyBindings (EditableSettings { keyBindings }) =
+    allActionsOrdered
+        |> List.map (\action -> { action = action, key = AssocList.get action keyBindings })
 
-        Game.Hold ->
-            keyBindings.keyActions.hold
 
-        Game.TogglePause ->
-            keyBindings.keyActions.togglePause
+keyBinding : Game.UserAction -> EditableSettings -> Maybe String
+keyBinding action (EditableSettings { keyBindings }) =
+    AssocList.get action keyBindings
+
+
+withKeyBinding : Game.UserAction -> String -> EditableSettings -> EditableSettings
+withKeyBinding action key (EditableSettings { keyBindings }) =
+    EditableSettings { keyBindings = AssocList.insert action key keyBindings }
