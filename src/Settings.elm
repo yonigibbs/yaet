@@ -98,10 +98,10 @@ allActionsOrdered : List Game.UserAction
 allActionsOrdered =
     [ Game.Move Game.Left
     , Game.Move Game.Right
-    , Game.Move Game.Down
-    , Game.DropToBottom
     , Game.Rotate Shape.Clockwise
     , Game.Rotate Shape.Anticlockwise
+    , Game.Move Game.Down
+    , Game.DropToBottom
     , Game.Hold
     , Game.TogglePause
     ]
@@ -142,5 +142,20 @@ keyBinding action (EditableSettings { keyBindings }) =
 
 
 withKeyBinding : Game.UserAction -> String -> EditableSettings -> EditableSettings
-withKeyBinding action key (EditableSettings { keyBindings }) =
-    EditableSettings { keyBindings = AssocList.insert action key keyBindings }
+withKeyBinding newAction newKey (EditableSettings { keyBindings }) =
+    let
+        -- Remove any other actions associated with this key.
+        newKeyBindings : AssocList.Dict Game.UserAction String
+        newKeyBindings =
+            keyBindings
+                |> AssocList.foldl
+                    (\currentAction currentKey acc ->
+                        if currentKey == newKey then
+                            acc
+
+                        else
+                            AssocList.insert currentAction currentKey acc
+                    )
+                    AssocList.empty
+    in
+    EditableSettings { keyBindings = AssocList.insert newAction newKey newKeyBindings }

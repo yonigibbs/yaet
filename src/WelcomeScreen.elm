@@ -524,7 +524,20 @@ getSettings (Model { settings }) =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions (Model { animatedBoard }) =
+subscriptions (Model { animatedBoard, settingsScreen }) =
+    Sub.batch [ animationSubscriptions animatedBoard, settingsScreenSubscription settingsScreen ]
+
+
+settingsScreenSubscription : Maybe SettingsScreen.Model -> Sub Msg
+settingsScreenSubscription maybeSettingScreen =
+    maybeSettingScreen
+        |> Maybe.map SettingsScreen.subscriptions
+        |> Maybe.withDefault Sub.none
+        |> Sub.map GotSettingsScreenMsg
+
+
+animationSubscriptions : AnimatedBoard -> Sub Msg
+animationSubscriptions animatedBoard =
     case animatedBoard of
         Initialising ->
             Sub.none
