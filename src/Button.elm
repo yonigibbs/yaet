@@ -23,14 +23,9 @@ type alias Config msg =
     { style : Style, caption : String, state : State msg }
 
 
-type FontWeight
-    = SemiBold
-    | Medium
-
-
 button : Config msg -> Element msg
 button ({ style, caption, state } as config) =
-    Element.el (commonAttrs state style ++ stateBasedAttrs state style) <| buttonElement config
+    Element.el (commonAttrs style ++ stateBasedAttrs state style) <| buttonElement config
 
 
 buttonElement : Config msg -> Element msg
@@ -57,8 +52,8 @@ labelAttrs style =
             [ Element.paddingXY 5 3 ]
 
 
-commonAttrs : State msg -> Style -> List (Element.Attribute msg)
-commonAttrs state style =
+commonAttrs : Style -> List (Element.Attribute msg)
+commonAttrs style =
     case style of
         MainScreen ->
             [ Element.Font.color UIHelpers.mainForegroundColour
@@ -66,8 +61,6 @@ commonAttrs state style =
             , Element.Border.width 2
             , Element.Border.rounded 20
             , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
-
-            --, Element.focused [ Element.Border.rounded 1 ]
             ]
 
         ModalDialog ->
@@ -95,17 +88,22 @@ stateBasedAttrs state style =
             [ Element.Background.color <| withOpacity 0.3 UIHelpers.mainBackgroundColour ]
 
         ( ModalDialog, Inaccessible ) ->
-            [ Element.Background.color UIHelpers.invertedButtonColour ]
+            [ Element.Background.color modalButtonColour ]
 
         ( ModalDialog, Enabled _ ) ->
-            [ Element.Background.color UIHelpers.invertedButtonColour
+            [ Element.Background.color modalButtonColour
             , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 1 ]
             ]
 
         ( ModalDialog, Disabled ) ->
-            [ Element.Background.color <| withOpacity 0.3 UIHelpers.invertedButtonColour ]
+            [ Element.Background.color <| withOpacity 0.3 modalButtonColour ]
 
 
 withOpacity : Float -> Element.Color -> Element.Color
 withOpacity opacity colour =
     colour |> Element.toRgb |> (\rgb -> { rgb | alpha = opacity }) |> Element.fromRgb
+
+
+modalButtonColour : Element.Color
+modalButtonColour =
+    Element.rgb255 180 180 180

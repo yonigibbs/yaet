@@ -92,38 +92,6 @@ modalButton caption onPress =
     Button.button { style = Button.ModalDialog, caption = caption, state = buttonState }
 
 
-
---let
---    label =
---        Element.el [ Element.paddingXY 5 3 ] (Element.text caption)
---
---    ( enablednessAttrs, contents ) =
---        case onPress of
---            Just _ ->
---                ( [ Element.Background.color <| Element.rgba255 180 180 180 1
---                  , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 1 ]
---                  ]
---                , Element.Input.button [] { onPress = onPress, label = label }
---                )
---
---            Nothing ->
---                ( [ Element.Background.color <| Element.rgba255 180 180 180 0.3 ]
---                , label
---                )
---in
---Element.el
---    ([ Element.Font.color UIHelpers.mainBackgroundColour
---     , Element.Border.width 1
---     , Element.Border.rounded 8
---     , Element.Font.size 14
---     , Element.Font.semiBold
---     , Element.paddingXY 2 1
---     ]
---        ++ enablednessAttrs
---    )
---    contents
-
-
 modalMask : Element msg -> Element msg
 modalMask contents =
     Element.el

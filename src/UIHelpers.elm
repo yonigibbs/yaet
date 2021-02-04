@@ -1,4 +1,4 @@
-module UIHelpers exposing (edges, invertedButtonColour, mainBackgroundColour, mainForegroundColour)
+module UIHelpers exposing (edges, mainBackgroundColour, mainForegroundColour)
 
 {-| Miscellaneous helper functions related to the UI/rendering.
 -}
@@ -27,8 +27,3 @@ mainBackgroundColour =
 mainForegroundColour : Element.Color
 mainForegroundColour =
     Element.rgb255 198 195 195
-
-
-invertedButtonColour : Element.Color
-invertedButtonColour =
-    Element.rgb255 180 180 180
