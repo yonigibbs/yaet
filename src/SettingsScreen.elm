@@ -7,6 +7,7 @@ import Element.Font
 import Element.Input
 import Game
 import Json.Decode as JD
+import Modal
 import Settings exposing (EditableSettings, Settings)
 import UIHelpers exposing (edges)
 
@@ -40,7 +41,7 @@ init settings =
 type Msg
     = RestoreDefaultSettingsRequested
     | SaveRequested
-    | Cancelled
+    | CancelRequested
     | KeySelectionScreenRequested Game.UserAction
     | KeySelected String
 
@@ -94,10 +95,10 @@ update msg ((Model ({ editableSettings, screen, settingsToPersist } as modelData
             , KeepOpen
             )
 
-        ( Cancelled, SettingsScreen ) ->
+        ( CancelRequested, SettingsScreen ) ->
             ( model, Cmd.none, Close Nothing )
 
-        ( Cancelled, KeySelectionScreen _ ) ->
+        ( CancelRequested, KeySelectionScreen _ ) ->
             ( Model { modelData | screen = SettingsScreen }, Cmd.none, KeepOpen )
 
         ( KeySelectionScreenRequested action, SettingsScreen ) ->
@@ -124,17 +125,17 @@ update msg ((Model ({ editableSettings, screen, settingsToPersist } as modelData
 
 
 view : Model -> Element Msg
-view (Model { editableSettings, screen, settingsToPersist }) =
-    case screen of
+view (Model modelData) =
+    case modelData.screen of
         SettingsScreen ->
-            settingsView editableSettings settingsToPersist
+            settingsView modelData
 
         KeySelectionScreen { action, key } ->
             keySelectionView action key
 
 
-settingsView : EditableSettings -> Maybe Settings -> Element Msg
-settingsView editableSettings settingsToPersist =
+settingsView : ModelData -> Element Msg
+settingsView ({ editableSettings, settingsToPersist } as modelData) =
     Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
         [ Element.el
             [ Element.centerX, Element.Font.bold, Element.Font.size 24, Element.paddingEach { edges | bottom = 15 } ]
@@ -143,11 +144,13 @@ settingsView editableSettings settingsToPersist =
         , keyBindingsTable editableSettings
         ]
         |> Element.el []
-        |> UIHelpers.showModal
-            { onSubmit = Maybe.map (always SaveRequested) settingsToPersist
-            , onCancel = Cancelled
-            , custom = [ ( "Restore Defaults", RestoreDefaultSettingsRequested ) ]
-            }
+        |> Modal.dialog (settingsScreenModalConfig modelData)
+
+
+settingsScreenModalConfig : { a | settingsToPersist : Maybe Settings } -> Modal.Config Msg
+settingsScreenModalConfig { settingsToPersist } =
+    Modal.defaultConfig CancelRequested (Maybe.map (always SaveRequested) settingsToPersist)
+        |> Modal.withCustomButton "Restore Defaults" (Just RestoreDefaultSettingsRequested)
 
 
 keySelectionView : Game.UserAction -> Maybe String -> Element Msg
@@ -165,7 +168,12 @@ keySelectionView action key =
         , Element.el [ Element.centerX, Element.Font.bold, Element.Font.size 24, Element.Font.color colour ] <| Element.text keyDescr
         ]
         |> Element.el []
-        |> UIHelpers.showModal { onSubmit = Maybe.map (always SaveRequested) key, onCancel = Cancelled, custom = [] }
+        |> Modal.dialog (keySelectionScreenModalConfig key)
+
+
+keySelectionScreenModalConfig : Maybe String -> Modal.Config Msg
+keySelectionScreenModalConfig key =
+    Modal.defaultConfig CancelRequested (Maybe.map (always SaveRequested) key)
 
 
 keyBindingsTable : EditableSettings -> Element Msg
@@ -248,7 +256,7 @@ keyBindingDecoder =
         |> JD.andThen
             (\key ->
                 if List.member key allowedKeys then
-                    JD.succeed <| KeySelected key
+                    Settings.sanitiseKey key |> KeySelected |> JD.succeed
 
                 else
                     JD.fail ""
@@ -260,10 +268,13 @@ keyBindingDecoder =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions (Model { screen }) =
-    case screen of
+subscriptions (Model modelData) =
+    case modelData.screen of
         SettingsScreen ->
-            Sub.none
+            settingsScreenModalConfig modelData |> Modal.subscriptions
 
-        KeySelectionScreen _ ->
-            Browser.Events.onKeyDown keyBindingDecoder
+        KeySelectionScreen { key } ->
+            Sub.batch
+                [ Browser.Events.onKeyDown keyBindingDecoder
+                , keySelectionScreenModalConfig key |> Modal.subscriptions
+                ]

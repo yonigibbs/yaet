@@ -1,4 +1,4 @@
-module Settings exposing (EditableSettings, Settings, allKeyBindings, default, fromEditable, fromJson, keyBinding, keyboardDecoder, toEditable, withKeyBinding)
+module Settings exposing (EditableSettings, Settings, allKeyBindings, default, fromEditable, fromJson, keyBinding, keyboardDecoder, sanitiseKey, toEditable, withKeyBinding)
 
 {-| Contains all functionality to defining the settings (i.e. user preferences) such as keyboard bindings. Contains
 the JSON de/encoders and the types.
@@ -58,14 +58,14 @@ buildKeyBindings :
     -> Dict String Game.UserAction
 buildKeyBindings { moveLeft, moveRight, dropOneRow, dropToBottom, rotateClockwise, rotateAnticlockwise, hold, togglePause } =
     Dict.fromList
-        [ ( String.toLower moveLeft, Game.Move Game.Left )
-        , ( String.toLower moveRight, Game.Move Game.Right )
-        , ( String.toLower dropOneRow, Game.Move Game.Down )
-        , ( String.toLower dropToBottom, Game.DropToBottom )
-        , ( String.toLower rotateClockwise, Game.Rotate Shape.Clockwise )
-        , ( String.toLower rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
-        , ( String.toLower hold, Game.Hold )
-        , ( String.toLower togglePause, Game.TogglePause )
+        [ ( sanitiseKey moveLeft, Game.Move Game.Left )
+        , ( sanitiseKey moveRight, Game.Move Game.Right )
+        , ( sanitiseKey dropOneRow, Game.Move Game.Down )
+        , ( sanitiseKey dropToBottom, Game.DropToBottom )
+        , ( sanitiseKey rotateClockwise, Game.Rotate Shape.Clockwise )
+        , ( sanitiseKey rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
+        , ( sanitiseKey hold, Game.Hold )
+        , ( sanitiseKey togglePause, Game.TogglePause )
         ]
 
 
@@ -77,7 +77,7 @@ keyboardDecoder (Settings { keyBindings }) =
     JD.field "key" JD.string
         |> JD.andThen
             (\key ->
-                case Dict.get (String.toLower key) keyBindings of
+                case Dict.get (sanitiseKey key) keyBindings of
                     Just action ->
                         JD.succeed action
 
@@ -159,3 +159,7 @@ withKeyBinding newAction newKey (EditableSettings { keyBindings }) =
                     AssocList.empty
     in
     EditableSettings { keyBindings = AssocList.insert newAction newKey newKeyBindings }
+
+
+sanitiseKey =
+    String.toLower

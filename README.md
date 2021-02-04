@@ -49,7 +49,8 @@ Current state: **WIP.**
 - [ ] Some moves currently not possible? Investigate T-spin triple, for example.
 - [ ] Consolidate `id` fields used in messages/subscriptions/etc - put into a module and expose as opaque type?
       (e.g. `PlayingModel.timerDropMessageId`, `HighlightAnimation.Id`, etc.)
-- [ ] Prevent default on key presses?
+- [ ] Prevent default on key presses? (Otherwise arrow keys can move viewport about if browser window small)
+  - [ ] See https://github.com/elm/browser/issues/89 - might need to use ports?
 - [ ] Make UI responsive.
   - [ ] Buttons to use instead of keyboard for phones/tablets?
 - [ ] Let user pause/resume by clicking on game
