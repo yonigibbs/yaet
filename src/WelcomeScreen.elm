@@ -6,6 +6,7 @@ available from the Welcome screen, e.g. the Settings.
 
 import Array
 import BoardView
+import Button
 import Coord exposing (Coord)
 import DroppingShape exposing (DroppingShape)
 import Element exposing (Element)
@@ -448,26 +449,24 @@ view (Model { animatedBoard, settings, settingsScreen }) =
         )
         [ Element.el [ Element.centerX ] <| BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
         , Element.row [ Element.centerX, Element.spacingXY 20 0 ]
-            [ button "Start Game" StartGameRequested
-            , button "Settings" ShowSettingsRequested
+            [ button settingsScreen "Start Game" StartGameRequested
+            , button settingsScreen "Settings" ShowSettingsRequested
             ]
         ]
 
 
-button : String -> msg -> Element msg
-button caption msg =
-    Element.Input.button
-        [ Element.Background.color UIHelpers.mainBackgroundColour
-        , Element.Font.color UIHelpers.mainForegroundColour
-        , Element.Border.color UIHelpers.mainForegroundColour
-        , Element.Border.width 2
-        , Element.Border.rounded 20
-        , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
-        , Element.focused []
-        ]
-        { onPress = Just msg
-        , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)
-        }
+button : Maybe SettingsScreen.Model -> String -> msg -> Element msg
+button settingsScreen caption onPress =
+    let
+        buttonState =
+            case settingsScreen of
+                Just _ ->
+                    Button.Inaccessible
+
+                Nothing ->
+                    Button.Enabled onPress
+    in
+    Button.button { style = Button.MainScreen, caption = caption, state = buttonState }
 
 
 

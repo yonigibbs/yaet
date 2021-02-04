@@ -1,13 +1,14 @@
 module Modal exposing (CloseButton(..), Config, CustomButton, SubmitButton(..), defaultConfig, dialog, subscriptions, withCustomButton)
 
 import Browser.Events
+import Button
 import Element exposing (Element)
 import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
 import Json.Decode as JD
-import UIHelpers exposing (mainBackgroundColour, mainForegroundColour)
+import UIHelpers
 
 
 type CloseButton msg
@@ -61,8 +62,8 @@ dialog { closeButton, submitButton, customButtons } contents =
                     [ modalButton "Close" (Just onPress) ]
     in
     Element.column
-        [ Element.Background.color mainBackgroundColour
-        , Element.Border.color mainForegroundColour
+        [ Element.Background.color UIHelpers.mainBackgroundColour
+        , Element.Border.color UIHelpers.mainForegroundColour
         , Element.Border.width 2
         , Element.centerX
         , Element.centerY
@@ -80,34 +81,47 @@ dialog { closeButton, submitButton, customButtons } contents =
 modalButton : String -> Maybe msg -> Element msg
 modalButton caption onPress =
     let
-        label =
-            Element.el [ Element.paddingXY 5 3 ] (Element.text caption)
-
-        ( enablednessAttrs, contents ) =
+        buttonState =
             case onPress of
-                Just _ ->
-                    ( [ Element.Background.color <| Element.rgba255 180 180 180 1
-                      , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 1 ]
-                      ]
-                    , Element.Input.button [ Element.focused [] ] { onPress = onPress, label = label }
-                    )
+                Just msg ->
+                    Button.Enabled msg
 
                 Nothing ->
-                    ( [ Element.Background.color <| Element.rgba255 180 180 180 0.3 ]
-                    , label
-                    )
+                    Button.Disabled
     in
-    Element.el
-        ([ Element.Font.color mainBackgroundColour
-         , Element.Border.width 1
-         , Element.Border.rounded 8
-         , Element.Font.size 14
-         , Element.Font.semiBold
-         , Element.paddingXY 2 1
-         ]
-            ++ enablednessAttrs
-        )
-        contents
+    Button.button { style = Button.ModalDialog, caption = caption, state = buttonState }
+
+
+
+--let
+--    label =
+--        Element.el [ Element.paddingXY 5 3 ] (Element.text caption)
+--
+--    ( enablednessAttrs, contents ) =
+--        case onPress of
+--            Just _ ->
+--                ( [ Element.Background.color <| Element.rgba255 180 180 180 1
+--                  , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 1 ]
+--                  ]
+--                , Element.Input.button [] { onPress = onPress, label = label }
+--                )
+--
+--            Nothing ->
+--                ( [ Element.Background.color <| Element.rgba255 180 180 180 0.3 ]
+--                , label
+--                )
+--in
+--Element.el
+--    ([ Element.Font.color UIHelpers.mainBackgroundColour
+--     , Element.Border.width 1
+--     , Element.Border.rounded 8
+--     , Element.Font.size 14
+--     , Element.Font.semiBold
+--     , Element.paddingXY 2 1
+--     ]
+--        ++ enablednessAttrs
+--    )
+--    contents
 
 
 modalMask : Element msg -> Element msg

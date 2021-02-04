@@ -203,7 +203,6 @@ keyBindingsTable settings =
                         [ Element.Border.widthEach { bottom = 1, left = 0, right = 0, top = 0 }
                         , Element.Border.color UIHelpers.mainBackgroundColour
                         , Element.mouseOver [ Element.Border.color UIHelpers.mainForegroundColour ]
-                        , Element.focused []
                         , Element.Font.color colour
                         ]
                         { onPress = Just <| KeySelectionScreenRequested action, label = Element.text caption }

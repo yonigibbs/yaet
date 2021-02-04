@@ -175,7 +175,21 @@ view model =
                     -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
                     GameOver.view gameOver.model |> wrapBoardView
     in
-    Element.layout
+    Element.layoutWith
+        { options =
+            [ Element.focusStyle
+                { borderColor = Just UIHelpers.mainForegroundColour
+                , backgroundColor = Nothing
+                , shadow =
+                    Just
+                        { color = Element.rgba255 198 195 195 0.6
+                        , offset = ( 0, 0 )
+                        , blur = 3
+                        , size = 2
+                        }
+                }
+            ]
+        }
         [ Element.width Element.fill
         , Element.height Element.fill
         , Element.Background.color UIHelpers.mainBackgroundColour
