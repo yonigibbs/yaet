@@ -10,10 +10,6 @@ import Button
 import Coord exposing (Coord)
 import DroppingShape exposing (DroppingShape)
 import Element exposing (Element)
-import Element.Background
-import Element.Border
-import Element.Font
-import Element.Input
 import HighlightAnimation
 import Random
 import Random.Array
@@ -22,7 +18,7 @@ import SettingsScreen
 import Shape exposing (Shape)
 import Task
 import Time
-import UIHelpers exposing (edges)
+import UIHelpers
 
 
 

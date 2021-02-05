@@ -1,4 +1,17 @@
-module Settings exposing (EditableSettings, Settings, allKeyBindings, default, fromEditable, fromJson, keyBinding, keyboardDecoder, sanitiseKey, toEditable, withKeyBinding)
+module Settings exposing
+    ( EditableSettings
+    , Settings
+    , allKeyBindings
+    , default
+    , fromEditable
+    , fromJson
+    , keyBinding
+    , keyboardDecoder
+    , sanitiseKey
+    , toEditable
+    , toJson
+    , withKeyBinding
+    )
 
 {-| Contains all functionality to defining the settings (i.e. user preferences) such as keyboard bindings. Contains
 the JSON de/encoders and the types.
@@ -16,10 +29,119 @@ type Settings
     = Settings { keyBindings : Dict String Game.UserAction }
 
 
+
+-- JSON
+
+
 fromJson : JE.Value -> Settings
 fromJson json =
-    -- TODO: read JSON from local storage and decode here
-    default
+    JD.decodeValue settingsDecoder json |> Result.withDefault default
+
+
+toJson : Settings -> JE.Value
+toJson (Settings { keyBindings }) =
+    keyBindings
+        |> Dict.toList
+        |> List.map (\( key, action ) -> ( actionToJsonFieldName action, JE.string key ))
+        |> JE.object
+        |> (\keyBindingsJson -> JE.object [ ( keyBindingsJsonFieldName, keyBindingsJson ) ])
+
+
+keyBindingsJsonFieldName =
+    "keyBindings"
+
+
+settingsDecoder : JD.Decoder Settings
+settingsDecoder =
+    JD.field keyBindingsJsonFieldName keyBindingsDecoder
+        |> JD.map (\keyBindings -> Settings { keyBindings = keyBindings })
+
+
+keyBindingsDecoder : JD.Decoder (Dict String Game.UserAction)
+keyBindingsDecoder =
+    JD.keyValuePairs JD.string
+        |> JD.map jsonNameValuePairsToKeyBindingsDict
+        |> JD.andThen
+            (\dict ->
+                if Dict.size dict == List.length allActionsOrdered then
+                    JD.succeed dict
+
+                else
+                    JD.fail "Incorrect number of entries in dictionary"
+            )
+
+
+jsonNameValuePairsToKeyBindingsDict : List ( String, String ) -> Dict String Game.UserAction
+jsonNameValuePairsToKeyBindingsDict =
+    List.foldl
+        (\( actionString, key ) dict ->
+            case jsonFieldNameToAction actionString of
+                Just action ->
+                    Dict.insert key action dict
+
+                Nothing ->
+                    dict
+        )
+        Dict.empty
+
+
+actionToJsonFieldName : Game.UserAction -> String
+actionToJsonFieldName action =
+    case action of
+        Game.Move Game.Left ->
+            "moveLeft"
+
+        Game.Move Game.Right ->
+            "moveRight"
+
+        Game.Move Game.Down ->
+            "softDrop"
+
+        Game.DropToBottom ->
+            "hardDrop"
+
+        Game.Rotate Shape.Clockwise ->
+            "rotateClockwise"
+
+        Game.Rotate Shape.Anticlockwise ->
+            "rotateAnticlockwise"
+
+        Game.Hold ->
+            "hold"
+
+        Game.TogglePause ->
+            "togglePause"
+
+
+jsonFieldNameToAction : String -> Maybe Game.UserAction
+jsonFieldNameToAction fieldName =
+    case fieldName of
+        "moveLeft" ->
+            Just <| Game.Move Game.Left
+
+        "moveRight" ->
+            Just <| Game.Move Game.Right
+
+        "softDrop" ->
+            Just <| Game.Move Game.Down
+
+        "hardDrop" ->
+            Just <| Game.DropToBottom
+
+        "rotateClockwise" ->
+            Just <| Game.Rotate Shape.Clockwise
+
+        "rotateAnticlockwise" ->
+            Just <| Game.Rotate Shape.Anticlockwise
+
+        "hold" ->
+            Just <| Game.Hold
+
+        "togglePause" ->
+            Just <| Game.TogglePause
+
+        _ ->
+            Nothing
 
 
 default : Settings

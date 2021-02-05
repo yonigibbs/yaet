@@ -8,6 +8,7 @@ import Element.Input
 import Game
 import Json.Decode as JD
 import Modal
+import Ports
 import Settings exposing (EditableSettings, Settings)
 import UIHelpers exposing (edges)
 
@@ -72,7 +73,14 @@ update msg ((Model ({ editableSettings, screen, settingsToPersist } as modelData
             ignore
 
         ( SaveRequested, SettingsScreen ) ->
-            ( model, Cmd.none, Close settingsToPersist )
+            case settingsToPersist of
+                Just validSettings ->
+                    ( model, Settings.toJson validSettings |> Ports.persistSettings, Close <| Just validSettings )
+
+                Nothing ->
+                    -- Should never happen - UI shouldn't let user submit the dialog if it's not valid (e.g. some key
+                    -- bindings not yet set).
+                    ignore
 
         ( SaveRequested, KeySelectionScreen { action, key } ) ->
             let
