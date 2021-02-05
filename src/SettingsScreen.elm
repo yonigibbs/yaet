@@ -144,14 +144,13 @@ view (Model modelData) =
 
 settingsView : ModelData -> Element Msg
 settingsView ({ editableSettings, settingsToPersist } as modelData) =
-    Element.column [ Element.Font.color UIHelpers.mainForegroundColour ]
+    Element.column [ Element.Font.color UIHelpers.mainForegroundColour, Element.width Element.fill ]
         [ Element.el
             [ Element.centerX, Element.Font.bold, Element.Font.size 24, Element.paddingEach { edges | bottom = 15 } ]
           <|
             Element.text "Settings"
         , keyBindingsTable editableSettings
         ]
-        |> Element.el []
         |> Modal.dialog (settingsScreenModalConfig modelData)
 
 
