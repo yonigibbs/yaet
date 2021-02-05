@@ -10,11 +10,11 @@ import Shape exposing (Shape)
 {-| The different shapes that can appear in the game.
 -}
 type ShapeType
-    = Ell
-    | EllMirror
-    | Zed
-    | ZedMirror
-    | HalfPlus
+    = LShape
+    | LMirrorShape
+    | ZShape
+    | SShape
+    | TShape
     | Square
     | Line
 
@@ -108,20 +108,20 @@ toAsciiShape orientation =
 toAsciiShapeTemplate : ShapeType -> AsciiShapeTemplate
 toAsciiShapeTemplate shapeType =
     case shapeType of
-        Ell ->
-            ell
+        LShape ->
+            lShape
 
-        EllMirror ->
-            ellMirror
+        LMirrorShape ->
+            lMirrorShape
 
-        Zed ->
-            zed
+        ZShape ->
+            zShape
 
-        ZedMirror ->
-            zedMirror
+        SShape ->
+            sShape
 
-        HalfPlus ->
-            halfPlus
+        TShape ->
+            tShape
 
         Square ->
             square
@@ -136,8 +136,8 @@ type alias AsciiShapeTemplate =
     { initial : String, clockwise : String, anticlockwise : String, oneEighty : String }
 
 
-ell : AsciiShapeTemplate
-ell =
+lShape : AsciiShapeTemplate
+lShape =
     { initial = """
 --x
 xxx
@@ -161,8 +161,8 @@ x--
     }
 
 
-ellMirror : AsciiShapeTemplate
-ellMirror =
+lMirrorShape : AsciiShapeTemplate
+lMirrorShape =
     { initial = """
 x--
 xxx
@@ -186,8 +186,8 @@ xxx
     }
 
 
-zed : AsciiShapeTemplate
-zed =
+zShape : AsciiShapeTemplate
+zShape =
     { initial = """
 xx-
 -xx
@@ -211,8 +211,8 @@ xx-
     }
 
 
-zedMirror : AsciiShapeTemplate
-zedMirror =
+sShape : AsciiShapeTemplate
+sShape =
     { initial = """
 -xx
 xx-
@@ -236,8 +236,8 @@ xx-
     }
 
 
-halfPlus : AsciiShapeTemplate
-halfPlus =
+tShape : AsciiShapeTemplate
+tShape =
     { initial = """
 -x-
 xxx

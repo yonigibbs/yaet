@@ -99,7 +99,7 @@ suite =
                     |> progressGame (executeUserActions [ Game.Move Game.Right ])
                     |> repeat 15 (executeUserActions [ Game.Move Game.Down ])
                     |> progressGame timerDrop
-                    -- Green half-plus has now appeared: it's on its back so rotate it once anti-clockwise then move it
+                    -- Green T has now appeared: it's on its back so rotate it once anti-clockwise then move it
                     -- all the way to the right before dropping it.
                     |> progressGame (executeUserActions [ Game.Rotate Shape.Anticlockwise ])
                     |> repeat 5 (executeUserActions [ Game.Move Game.Right ])
@@ -364,22 +364,22 @@ the first four shapes. The shapes in order are:
   - L (orange)
   - Square (yellow)
   - Line (cyan)
-  - Half-plus (purple)
+  - T (purple)
   - Z (red)
-  - Z-mirror-image (green)
-  - L-mirror-image (blue)
+  - S (green)
+  - L-mirror (blue)
 
 -}
 defaultInitialGameState : List Shape
 defaultInitialGameState =
     List.map ShapeUtils.getShape
-        [ ShapeUtils.Ell
+        [ ShapeUtils.LShape
         , ShapeUtils.Square
         , ShapeUtils.Line
-        , ShapeUtils.HalfPlus
-        , ShapeUtils.Zed
-        , ShapeUtils.ZedMirror
-        , ShapeUtils.EllMirror
+        , ShapeUtils.TShape
+        , ShapeUtils.ZShape
+        , ShapeUtils.SShape
+        , ShapeUtils.LMirrorShape
         ]
 
 

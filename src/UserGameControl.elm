@@ -146,7 +146,7 @@ removeNonRepeatableActions =
     List.filter
         (\{ action } ->
             case action of
-                Game.DropToBottom ->
+                Game.HardDrop ->
                     False
 
                 Game.Rotate _ ->
@@ -197,7 +197,7 @@ conflictsOf action =
         Game.Move Game.Down ->
             []
 
-        Game.DropToBottom ->
+        Game.HardDrop ->
             [ Game.Move Game.Left
             , Game.Move Game.Right
             , Game.Move Game.Down
@@ -217,7 +217,7 @@ conflictsOf action =
             , Game.Move Game.Down
             , Game.Rotate Shape.Clockwise
             , Game.Rotate Shape.Anticlockwise
-            , Game.DropToBottom
+            , Game.HardDrop
             ]
 
         Game.TogglePause ->
@@ -226,7 +226,7 @@ conflictsOf action =
             , Game.Move Game.Down
             , Game.Rotate Shape.Clockwise
             , Game.Rotate Shape.Anticlockwise
-            , Game.DropToBottom
+            , Game.HardDrop
             , Game.Hold
             ]
 

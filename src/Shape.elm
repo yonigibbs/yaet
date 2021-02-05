@@ -45,7 +45,7 @@ When rotated clockwise, this would become:
     |   |   | X |   |
     +---+---+---+---+
 
-In the example of the shape which "a plus sign with a bit missing", it only requires a 3x3 grid:
+In the example of the T-shape, it only requires a 3x3 grid:
 
     +---+---+---+
     |   | X |   |
@@ -138,15 +138,15 @@ allShapes =
           -- x
           -- x x x
           { gridSize = 3, blocks = [ ( 0, 2 ), ( 0, 1 ), ( 1, 1 ), ( 2, 1 ) ], colour = Blue }
-        , -- Plus-sign with a bit on the bottom missing:
+        , -- T-shape:
           --   x
           -- x x x
           { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 1 ) ], colour = Purple }
-        , -- Almost a "z-shape":
+        , -- Z-shape:
           -- x x
           --   x x
           { gridSize = 3, blocks = [ ( 0, 2 ), ( 1, 2 ), ( 1, 1 ), ( 2, 1 ) ], colour = Red }
-        , -- Mirror image of the above:
+        , -- S-shape (mirror image of the above):
           --   x x
           -- x x
           { gridSize = 3, blocks = [ ( 0, 1 ), ( 1, 1 ), ( 1, 2 ), ( 2, 2 ) ], colour = Green }

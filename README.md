@@ -43,9 +43,9 @@ Current state: **WIP.**
 - [x] Fix issue where guidelines don't show for one frame after line removed
 - [x] Settings/preferences, e.g. keyboard bindings (persisted to local storage)
     - [x] Let user close screen by pressing Escape key
-- [ ] Update terminology in code - use soft/hard drop, and proper shape names, etc
+- [x] Update terminology in code - use soft/hard drop, and proper shape names, etc
 - [ ] Scores
-- [ ] High scores (persisted to local storage)
+  - [ ] High scores (persisted to local storage)
 - [ ] Add link to get to source code, etc.
 - [ ] Some moves currently not possible? Investigate T-spin triple, for example.
 - [ ] Consolidate `id` fields used in messages/subscriptions/etc - put into a module and expose as opaque type?

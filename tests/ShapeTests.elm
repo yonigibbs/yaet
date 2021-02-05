@@ -12,12 +12,12 @@ suite =
     describe "Shape"
         [ describe "rotate" <|
             List.concat
-                [ allRotationTests "L-shape" ShapeUtils.Ell
-                , allRotationTests "L-shape-mirror" ShapeUtils.EllMirror
-                , allRotationTests "Z-shape" ShapeUtils.Zed
-                , allRotationTests "Z-shape-mirror" ShapeUtils.ZedMirror
-                , allRotationTests "Half-plus-sign-shape" ShapeUtils.HalfPlus
-                , allRotationTests "Straight-line" ShapeUtils.Line
+                [ allRotationTests "L-shape" ShapeUtils.LShape
+                , allRotationTests "L-mirror-shape" ShapeUtils.LMirrorShape
+                , allRotationTests "Z-shape" ShapeUtils.ZShape
+                , allRotationTests "S-shape" ShapeUtils.SShape
+                , allRotationTests "T-shape" ShapeUtils.TShape
+                , allRotationTests "Line" ShapeUtils.Line
                 , allRotationTests "Square" ShapeUtils.Square
                 ]
         , describe "clippedBlocks" <|
@@ -28,7 +28,7 @@ suite =
                 (ShapeUtils.getShape ShapeUtils.Line |> rotateXTimes Shape.Clockwise 1)
                 [ ( 0, 0 ), ( 0, 1 ), ( 0, 2 ), ( 0, 3 ) ]
             , clippedBlocksTest "L-shape"
-                (ShapeUtils.getShape ShapeUtils.Ell)
+                (ShapeUtils.getShape ShapeUtils.LShape)
                 [ ( 0, 0 ), ( 1, 0 ), ( 2, 0 ), ( 2, 1 ) ]
             , clippedBlocksTest "Square"
                 (ShapeUtils.getShape ShapeUtils.Square)

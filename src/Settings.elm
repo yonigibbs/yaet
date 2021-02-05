@@ -120,7 +120,7 @@ actionToJsonFieldName action =
         Game.Move Game.Down ->
             "softDrop"
 
-        Game.DropToBottom ->
+        Game.HardDrop ->
             "hardDrop"
 
         Game.Rotate Shape.Clockwise ->
@@ -149,7 +149,7 @@ jsonFieldNameToAction fieldName =
             Just <| Game.Move Game.Down
 
         "hardDrop" ->
-            Just <| Game.DropToBottom
+            Just <| Game.HardDrop
 
         "rotateClockwise" ->
             Just <| Game.Rotate Shape.Clockwise
@@ -176,8 +176,8 @@ default =
             buildKeyBindings
                 { moveLeft = "ArrowLeft"
                 , moveRight = "ArrowRight"
-                , dropOneRow = "ArrowDown"
-                , dropToBottom = " "
+                , softDrop = "ArrowDown"
+                , hardDrop = " "
                 , rotateClockwise = "x"
                 , rotateAnticlockwise = "z"
                 , hold = "c"
@@ -195,20 +195,20 @@ default =
 buildKeyBindings :
     { moveLeft : String
     , moveRight : String
-    , dropOneRow : String
-    , dropToBottom : String
+    , softDrop : String
+    , hardDrop : String
     , rotateClockwise : String
     , rotateAnticlockwise : String
     , hold : String
     , togglePause : String
     }
     -> Dict String Game.UserAction
-buildKeyBindings { moveLeft, moveRight, dropOneRow, dropToBottom, rotateClockwise, rotateAnticlockwise, hold, togglePause } =
+buildKeyBindings { moveLeft, moveRight, softDrop, hardDrop, rotateClockwise, rotateAnticlockwise, hold, togglePause } =
     Dict.fromList
         [ ( String.toLower moveLeft, Game.Move Game.Left )
         , ( String.toLower moveRight, Game.Move Game.Right )
-        , ( String.toLower dropOneRow, Game.Move Game.Down )
-        , ( String.toLower dropToBottom, Game.DropToBottom )
+        , ( String.toLower softDrop, Game.Move Game.Down )
+        , ( String.toLower hardDrop, Game.HardDrop )
         , ( String.toLower rotateClockwise, Game.Rotate Shape.Clockwise )
         , ( String.toLower rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
         , ( String.toLower hold, Game.Hold )
@@ -256,7 +256,7 @@ allActionsOrdered =
     , Game.Rotate Shape.Clockwise
     , Game.Rotate Shape.Anticlockwise
     , Game.Move Game.Down
-    , Game.DropToBottom
+    , Game.HardDrop
     , Game.Hold
     , Game.TogglePause
     ]

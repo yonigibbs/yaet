@@ -177,7 +177,7 @@ type MoveDirection
 -}
 type UserAction
     = Move MoveDirection
-    | DropToBottom
+    | HardDrop
     | Rotate Shape.RotationDirection
     | Hold
     | TogglePause
@@ -197,7 +197,7 @@ userActionDescription action =
         Move Down ->
             "Soft drop"
 
-        DropToBottom ->
+        HardDrop ->
             "Hard drop"
 
         Rotate Shape.Clockwise ->
@@ -295,8 +295,8 @@ executeUserActions getShape actions ((Game ({ state, board, holdInfo } as model)
                 if List.any isHoldAction actions then
                     executeHoldAction getShape model droppingShape
 
-                else if List.any isDropToBottomAction actions then
-                    executeDropToBottomAction getShape model droppingShape
+                else if List.any isHardDropAction actions then
+                    executeHardDropAction getShape model droppingShape
 
                 else
                     -- TODO: if the actions are "drop down" and "move left", and the shape is directly on top of another
@@ -357,10 +357,10 @@ isHoldAction action =
             False
 
 
-isDropToBottomAction : UserAction -> Bool
-isDropToBottomAction action =
+isHardDropAction : UserAction -> Bool
+isHardDropAction action =
     case action of
-        DropToBottom ->
+        HardDrop ->
             True
 
         _ ->
@@ -400,8 +400,8 @@ executeMoveAction board droppingShape direction =
         NotAllowed
 
 
-executeDropToBottomAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> UpdateResult shapeBuffer
-executeDropToBottomAction getShape model droppingShape =
+executeHardDropAction : GetShape shapeBuffer -> Model shapeBuffer -> DroppingShape -> UpdateResult shapeBuffer
+executeHardDropAction getShape model droppingShape =
     handleDroppingShapeLanded getShape (calcLandingPos model.board droppingShape) True model
 
 
