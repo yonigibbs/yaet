@@ -1,20 +1,20 @@
-module WelcomeScreen exposing (Model, Msg, init, subscriptions, update, view)
+module WelcomeScreen exposing (Model, Msg, UpdateResult(..), getSettings, init, subscriptions, update, view)
 
-{-| This module contains all functionality related to the welcome screen. Manages the animations shown here.
+{-| This module contains all functionality related to the welcome screen. Manages the animated board and functionality
+available from the Welcome screen, e.g. the Settings.
 -}
 
 import Array
 import BoardView
+import Button
 import Coord exposing (Coord)
 import DroppingShape exposing (DroppingShape)
 import Element exposing (Element)
-import Element.Background
-import Element.Border
-import Element.Font
-import Element.Input
 import HighlightAnimation
 import Random
 import Random.Array
+import Settings exposing (Settings)
+import SettingsScreen
 import Shape exposing (Shape)
 import Task
 import Time
@@ -31,8 +31,8 @@ type alias Letter =
     { blocks : List Coord, colour : Shape.BlockColour, gridCoord : Coord }
 
 
-{-| The data associated with the `DroppingLetters` variant of the `Model`. Defines the data required to show the welcome
-screen at the stage where the letters of Tetris are dropping onto the board one by one.
+{-| The data associated with the `DroppingLetters` variant of `AnimatedBoard`. Defines the data required to show the
+welcome screen at the stage where the letters of Tetris are dropping onto the board one by one.
 
   - `landed`: the letters which have already landed.
   - `dropping`: the letter which is currently dropping down.
@@ -50,9 +50,9 @@ type alias DroppingLettersData =
     }
 
 
-{-| The data associated with the `PulsingLetters` variant of the `Model`. Defines the data required to show the welcome
-screen at the stage where the letters of Tetris have already landed and are now being pulsed (faded out then back in
-briefly). This stage doesn't actually use the `randomSeed` value but stores it so it can be passed to the subsequent
+{-| The data associated with the `PulsingLetters` variant of `AnimatedBoard`. Defines the data required to show the
+welcome screen at the stage where the letters of Tetris have already landed and are now being pulsed (faded out then back
+in briefly). This stage doesn't actually use the `randomSeed` value but stores it so it can be passed to the subsequent
 stage (`DroppingRandomShapes`) which does need it.
 -}
 type alias PulsingLettersData =
@@ -62,7 +62,7 @@ type alias PulsingLettersData =
     }
 
 
-{-| The data associated with the `DroppingRandomShapes` variant of the `Model`. Defines the data required to show the
+{-| The data associated with the `DroppingRandomShapes` variant of `AnimatedBoard`. Defines the data required to show the
 welcome screen at the stage where the letters of Tetris have landed and been pulsed, and now random shapes drop down
 "behind" those letters.
 
@@ -81,8 +81,18 @@ type alias DroppingRandomShapesData =
     }
 
 
-{-| The model of this module, exposed as an opaque type. Defines the three stages of the animation shows on the Welcome
-screen (along with an `Initialising` state, used purely to get the current time to use a random seed):
+{-| The model of this module, exposed as an opaque type.
+-}
+type Model
+    = Model ModelData
+
+
+type alias ModelData =
+    { animatedBoard : AnimatedBoard, settings : Settings, settingsScreen : Maybe SettingsScreen.Model }
+
+
+{-| The state of the animated board on the Welcome screen. Defines the three stages of the animation, along with an
+`Initialising` state, used purely to get the current time to use a random seed:
 
   - `DroppingLetters`: The letters of the word "Tetris" are dropping onto the board, one by one.
   - `PulsingLetters`: The letters of the word "Tetris" are being "pulsed" (faded out then back in).
@@ -90,16 +100,18 @@ screen (along with an `Initialising` state, used purely to get the current time 
     letters of Tetris.
 
 -}
-type Model
+type AnimatedBoard
     = Initialising
     | DroppingLetters DroppingLettersData
     | PulsingLetters PulsingLettersData
     | DroppingRandomShapes DroppingRandomShapesData
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( Initialising, Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised) )
+init : Settings -> ( Model, Cmd Msg )
+init settings =
+    ( Model { animatedBoard = Initialising, settings = settings, settingsScreen = Nothing }
+    , Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised)
+    )
 
 
 
@@ -107,38 +119,106 @@ init =
 
 
 type Msg
-    = Initialised Random.Seed -- Ready to start the animation (the supplied value is used as a random seed for various aspects)
+    = Initialised Random.Seed -- Ready to start the board animation (the supplied value is used as a random seed for various aspects)
     | LetterDropAnimationFrame -- A letter should be dropped another row (or a new letter added)
     | GotHighlightAnimationMsg HighlightAnimation.Msg -- A pulsing animation frame has occurred
     | ShapeDropDelayElapsed -- The delay between each time the dropping shapes are lowered a row has elapsed
+    | ShowSettingsRequested -- The user has requested to see the Settings modal
+    | GotSettingsScreenMsg SettingsScreen.Msg -- The user has clicked Save on the settings modal
+    | StartGameRequested -- The user has clicked the Start Game button
 
 
-update : Msg -> Model -> Model
-update msg model =
-    case ( msg, model ) of
+{-| Returned from the `update` function. Defines whether the calling module should stay on the Welcome screen, or whether
+it should start a new game.
+-}
+type UpdateResult
+    = Stay
+    | StartGame
+
+
+update : Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
+update msg ((Model { animatedBoard }) as model) =
+    case ( msg, animatedBoard ) of
         ( Initialised randomSeed, Initialising ) ->
-            initDroppingLetters randomSeed |> DroppingLetters
+            ( model |> withAnimatedBoard (initDroppingLetters randomSeed |> DroppingLetters)
+            , Cmd.none
+            , Stay
+            )
 
         ( Initialised _, _ ) ->
-            model
+            ( model, Cmd.none, Stay )
 
         ( LetterDropAnimationFrame, DroppingLetters data ) ->
-            onLetterDropAnimationFrame data
+            ( model |> withAnimatedBoard (onLetterDropAnimationFrame data)
+            , Cmd.none
+            , Stay
+            )
 
         ( LetterDropAnimationFrame, _ ) ->
-            model
+            ( model, Cmd.none, Stay )
 
         ( GotHighlightAnimationMsg highlightAnimationMsg, PulsingLetters data ) ->
-            onPulsingLettersAnimationFrame model highlightAnimationMsg data
+            ( model |> withAnimatedBoard (onPulsingLettersAnimationFrame animatedBoard highlightAnimationMsg data)
+            , Cmd.none
+            , Stay
+            )
 
         ( GotHighlightAnimationMsg _, _ ) ->
-            model
+            ( model, Cmd.none, Stay )
 
         ( ShapeDropDelayElapsed, DroppingRandomShapes data ) ->
-            handleShapeDropDelayElapsed data |> DroppingRandomShapes
+            ( model |> withAnimatedBoard (handleShapeDropDelayElapsed data |> DroppingRandomShapes)
+            , Cmd.none
+            , Stay
+            )
 
         ( ShapeDropDelayElapsed, _ ) ->
-            model
+            ( model, Cmd.none, Stay )
+
+        ( ShowSettingsRequested, _ ) ->
+            ( showSettingsScreen model
+            , Cmd.none
+            , Stay
+            )
+
+        ( GotSettingsScreenMsg subMsg, _ ) ->
+            handleSettingsScreenMsg subMsg model
+
+        ( StartGameRequested, _ ) ->
+            ( model, Cmd.none, StartGame )
+
+
+withAnimatedBoard : AnimatedBoard -> Model -> Model
+withAnimatedBoard animatedBoard (Model modelData) =
+    Model { modelData | animatedBoard = animatedBoard }
+
+
+showSettingsScreen : Model -> Model
+showSettingsScreen (Model ({ settings } as modelData)) =
+    Model { modelData | settingsScreen = Just <| SettingsScreen.init settings }
+
+
+handleSettingsScreenMsg : SettingsScreen.Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
+handleSettingsScreenMsg settingsMsg ((Model modelData) as model) =
+    case modelData.settingsScreen of
+        Just settingsScreen ->
+            let
+                ( settingsModel, settingsCmd, settingsUpdateResult ) =
+                    SettingsScreen.update settingsMsg settingsScreen
+
+                nextModelData =
+                    case settingsUpdateResult of
+                        SettingsScreen.KeepOpen ->
+                            { modelData | settingsScreen = Just settingsModel }
+
+                        SettingsScreen.Close maybeNewSettings ->
+                            -- Close settings screen, possibly updating the settings
+                            { modelData | settings = maybeNewSettings |> Maybe.withDefault modelData.settings, settingsScreen = Nothing }
+            in
+            ( Model nextModelData, Cmd.map GotSettingsScreenMsg settingsCmd, Stay )
+
+        Nothing ->
+            ( model, Cmd.none, Stay )
 
 
 {-| Gets the initial state of the `DroppingLetters` state of the screen. Gets all the letters ready to drop, along with
@@ -174,7 +254,7 @@ initDroppingLetters randomSeed =
 a new letter to be dropped, or progresses to the next stage once all letters have landed (i.e. to the `PulsingLetters`
 stage).
 -}
-onLetterDropAnimationFrame : DroppingLettersData -> Model
+onLetterDropAnimationFrame : DroppingLettersData -> AnimatedBoard
 onLetterDropAnimationFrame ({ landed, dropping, next, randomSeed } as data) =
     let
         ( gridX, gridY ) =
@@ -212,14 +292,14 @@ onLetterDropAnimationFrame ({ landed, dropping, next, randomSeed } as data) =
 module then, based on its result, either continues the current animation or progresses to the next stage (i.e. the
 `DroppingRandomShapes` stage).
 -}
-onPulsingLettersAnimationFrame : Model -> HighlightAnimation.Msg -> PulsingLettersData -> Model
-onPulsingLettersAnimationFrame model msg data =
+onPulsingLettersAnimationFrame : AnimatedBoard -> HighlightAnimation.Msg -> PulsingLettersData -> AnimatedBoard
+onPulsingLettersAnimationFrame animatedBoard msg data =
     case HighlightAnimation.update msg data.animation of
         HighlightAnimation.IgnoreMsg ->
-            model
+            animatedBoard
 
-        HighlightAnimation.Continue nextAnimationModel ->
-            PulsingLetters { data | animation = nextAnimationModel }
+        HighlightAnimation.Continue animation ->
+            PulsingLetters { data | animation = animation }
 
         HighlightAnimation.Complete ->
             initDroppingRandomShapes data.randomSeed data.letters |> DroppingRandomShapes
@@ -320,14 +400,14 @@ rotateXTimes turns shape =
 
 
 
--- VIEW
+-- VIEW: COMMON
 
 
-view : Model -> msg -> Element msg
-view model startGameMsg =
+view : Model -> Element Msg
+view (Model { animatedBoard, settings, settingsScreen }) =
     let
         ( letters_, maybeAnimation, droppingShapes_ ) =
-            case model of
+            case animatedBoard of
                 Initialising ->
                     ( [], Nothing, [] )
 
@@ -347,26 +427,49 @@ view model startGameMsg =
             droppingShapes_
                 |> List.concatMap droppingShapeToBoardBlocks
                 |> BoardView.withOpacity 0.5
+
+        modalAttr =
+            case settingsScreen of
+                Just settingsScreenModel ->
+                    [ SettingsScreen.view settingsScreenModel
+                        |> Element.map GotSettingsScreenMsg
+                        |> Element.inFront
+                    ]
+
+                Nothing ->
+                    []
     in
-    Element.column [ Element.spacingXY 0 25 ]
-        [ BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
-        , Element.row [ Element.centerX ] [ button "Start Game" startGameMsg ]
+    Element.column
+        ([ Element.spacingXY 0 25
+         , Element.height Element.fill
+         , Element.width Element.fill
+         ]
+            ++ modalAttr
+        )
+        [ Element.el [ Element.centerX ] <| BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
+        , Element.row [ Element.centerX, Element.spacingXY 20 0 ]
+            [ button settingsScreen "Start Game" StartGameRequested
+            , button settingsScreen "Settings" ShowSettingsRequested
+            ]
         ]
 
 
-button : String -> msg -> Element msg
-button caption msg =
-    Element.Input.button
-        [ Element.Background.color UIHelpers.mainBackgroundColour
-        , Element.Font.color UIHelpers.buttonBorderColor
-        , Element.Border.color UIHelpers.buttonBorderColor
-        , Element.Border.width 2
-        , Element.Border.rounded 20
-        , Element.mouseOver [ Element.Border.glow (Element.rgb255 198 195 195) 2 ]
-        ]
-        { onPress = Just msg
-        , label = Element.el [ Element.paddingEach { top = 5, right = 7, bottom = 7, left = 7 } ] (Element.text caption)
-        }
+button : Maybe SettingsScreen.Model -> String -> msg -> Element msg
+button settingsScreen caption onPress =
+    let
+        buttonState =
+            case settingsScreen of
+                Just _ ->
+                    Button.Inaccessible
+
+                Nothing ->
+                    Button.Enabled onPress
+    in
+    Button.button { style = Button.MainScreen, caption = caption, state = buttonState }
+
+
+
+-- VIEW: BOARD
 
 
 {-| The configuration required to render the board in the welcome screen.
@@ -406,12 +509,34 @@ droppingShapeToBoardBlocks droppingShape =
 
 
 
+-- SETTINGS
+
+
+getSettings : Model -> Settings
+getSettings (Model { settings }) =
+    settings
+
+
+
 -- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    case model of
+subscriptions (Model { animatedBoard, settingsScreen }) =
+    Sub.batch [ animationSubscriptions animatedBoard, settingsScreenSubscription settingsScreen ]
+
+
+settingsScreenSubscription : Maybe SettingsScreen.Model -> Sub Msg
+settingsScreenSubscription maybeSettingScreen =
+    maybeSettingScreen
+        |> Maybe.map SettingsScreen.subscriptions
+        |> Maybe.withDefault Sub.none
+        |> Sub.map GotSettingsScreenMsg
+
+
+animationSubscriptions : AnimatedBoard -> Sub Msg
+animationSubscriptions animatedBoard =
+    case animatedBoard of
         Initialising ->
             Sub.none
 

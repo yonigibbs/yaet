@@ -1,4 +1,4 @@
-module UserGameControl exposing (KeyboardConfig, Model, Msg, buildKeyboardConfig, init, subscriptions, update)
+module UserGameControl exposing (Model, Msg, init, subscriptions, update)
 
 {-| This module is responsible for handling user-initiated actions. Its model stores which keys are currently being
 held down, and it calculates, based on that, which actions to run. For example if a user holds down the left arrow and the
@@ -16,9 +16,9 @@ every time it occurs, means that the keyboard press should be processed again.
 -}
 
 import Browser.Events
-import Dict exposing (Dict)
 import Game
 import Json.Decode as JD
+import Settings exposing (Settings)
 import Shape
 import Time
 
@@ -45,37 +45,23 @@ type alias ActionRequest =
 
 {-| The data associated with the model, which is exposed as an opaque type
 
-  - `keyboardConfig`: A mapping of keyboard keys to the actions they should invoke.
+  - `settings`: The settings, which provide access to things like the key bindings.
   - `requests`: A list of requests for actions to be executed, generally corresponding to all the keys currently being
     held down. This list is in order, with the most recent presses first, so that they override older presses (e.g. if
     user holds down left arrow then right arrow, we ignore the left arrow and move the shape right).
 
 -}
 type alias ModelData =
-    { keyboardConfig : KeyboardConfig, requests : List ActionRequest }
+    { settings : Settings, requests : List ActionRequest }
 
 
 type Model
     = Model ModelData
 
 
-init : Model
-init =
-    Model
-        -- TODO: make keyboard bindings configurable
-        { keyboardConfig =
-            buildKeyboardConfig
-                { moveLeft = "ArrowLeft"
-                , moveRight = "ArrowRight"
-                , dropOneRow = "ArrowDown"
-                , dropToBottom = " "
-                , rotateClockwise = "x"
-                , rotateAnticlockwise = "z"
-                , hold = "c"
-                , togglePause = "p"
-                }
-        , requests = []
-        }
+init : Settings -> Model
+init settings =
+    Model { settings = settings, requests = [] }
 
 
 
@@ -246,65 +232,11 @@ conflictsOf action =
 
 
 
--- KEYBOARD
-
-
-{-| The configuration of the keyboard keys, mapping them to their corresponding user actions.
--}
-type KeyboardConfig
-    = KeyboardConfig (Dict String Game.UserAction)
-
-
-{-| Builds a `KeyboardConfig` from the supplied values.
--}
-buildKeyboardConfig :
-    { moveLeft : String
-    , moveRight : String
-    , dropOneRow : String
-    , dropToBottom : String
-    , rotateClockwise : String
-    , rotateAnticlockwise : String
-    , hold : String
-    , togglePause : String
-    }
-    -> KeyboardConfig
-buildKeyboardConfig { moveLeft, moveRight, dropOneRow, dropToBottom, rotateClockwise, rotateAnticlockwise, hold, togglePause } =
-    KeyboardConfig <|
-        Dict.fromList
-            [ ( String.toLower moveLeft, Game.Move Game.Left )
-            , ( String.toLower moveRight, Game.Move Game.Right )
-            , ( String.toLower dropOneRow, Game.Move Game.Down )
-            , ( String.toLower dropToBottom, Game.DropToBottom )
-            , ( String.toLower rotateClockwise, Game.Rotate Shape.Clockwise )
-            , ( String.toLower rotateAnticlockwise, Game.Rotate Shape.Anticlockwise )
-            , ( String.toLower hold, Game.Hold )
-            , ( String.toLower togglePause, Game.TogglePause )
-            ]
-
-
-{-| Decodes a key event, succeeding if it's one of the special keys we handle (as defined in the supplied `config`),
-otherwise failing.
--}
-keyboardDecoder : KeyboardConfig -> JD.Decoder Game.UserAction
-keyboardDecoder (KeyboardConfig config) =
-    JD.field "key" JD.string
-        |> JD.andThen
-            (\key ->
-                case Dict.get (String.toLower key) config of
-                    Just action ->
-                        JD.succeed action
-
-                    Nothing ->
-                        JD.fail "Not a mapped key - ignoring"
-            )
-
-
-
 -- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
-subscriptions (Model { requests, keyboardConfig }) =
+subscriptions (Model { settings, requests }) =
     let
         keyboardFrameSub =
             case requests of
@@ -316,7 +248,7 @@ subscriptions (Model { requests, keyboardConfig }) =
                     Time.every 50 <| always KeyboardFrame
     in
     Sub.batch
-        [ keyboardDecoder keyboardConfig |> JD.map ActionRequestStarted |> Browser.Events.onKeyDown
-        , keyboardDecoder keyboardConfig |> JD.map ActionRequestStopped |> Browser.Events.onKeyUp
+        [ Settings.keyboardDecoder settings |> JD.map ActionRequestStarted |> Browser.Events.onKeyDown
+        , Settings.keyboardDecoder settings |> JD.map ActionRequestStopped |> Browser.Events.onKeyUp
         , keyboardFrameSub
         ]

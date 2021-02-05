@@ -1,13 +1,9 @@
-module UIHelpers exposing (buttonBorderColor, edges, mainBackgroundColour)
+module UIHelpers exposing (edges, mainBackgroundColour, mainForegroundColour)
 
 {-| Miscellaneous helper functions related to the UI/rendering.
 -}
 
 import Element exposing (Element)
-import Element.Background
-import Element.Border
-import Element.Font
-import Element.Input
 
 
 edges : { top : Int, right : Int, bottom : Int, left : Int }
@@ -26,8 +22,8 @@ mainBackgroundColour =
     Element.rgb255 30 30 30
 
 
-{-| The colour to put on buttons.
+{-| The colour to use by default for the foreground (fonts, buttons, etc)
 -}
-buttonBorderColor : Element.Color
-buttonBorderColor =
+mainForegroundColour : Element.Color
+mainForegroundColour =
     Element.rgb255 198 195 195

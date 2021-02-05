@@ -13,6 +13,7 @@ module Game exposing
     , previewLandingBlocks
     , timerDrop
     , upcomingShape
+    , userActionDescription
     )
 
 {-| This module has the model and logic for a game. It's responsible for responding to requests (typically originating
@@ -180,6 +181,36 @@ type UserAction
     | Rotate Shape.RotationDirection
     | Hold
     | TogglePause
+
+
+{-| Gets a user-friendly string description of the given action.
+-}
+userActionDescription : UserAction -> String
+userActionDescription action =
+    case action of
+        Move Left ->
+            "Move left"
+
+        Move Right ->
+            "Move right"
+
+        Move Down ->
+            "Soft drop"
+
+        DropToBottom ->
+            "Hard drop"
+
+        Rotate Shape.Clockwise ->
+            "Rotate clockwise"
+
+        Rotate Shape.Anticlockwise ->
+            "Rotate anticlockwise"
+
+        Hold ->
+            "Hold"
+
+        TogglePause ->
+            "Pause/resume"
 
 
 {-| The result of executing a single user action:

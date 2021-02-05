@@ -1,4 +1,4 @@
-module GameOver exposing (Model, Msg, UpdateResult(..), init, subscriptions, update, view)
+module GameOver exposing (Model, Msg, UpdateResult(..), getHighScores, init, subscriptions, update, view)
 
 {-| This module handles all functionality related to when a game is over. Shows the board as it was when the game ended,
 animating a "Game Over" message on top of it, then fading the game out.
@@ -12,6 +12,7 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Game exposing (Game)
+import HighScores exposing (HighScores)
 import Shape
 import UIHelpers
 import UserGame
@@ -38,18 +39,19 @@ type Animation
 {-| The data associated with the model (which is an opaque type).
 -}
 type alias ModelData =
-    { blocks : List ( Coord, Shape.BlockColour ), animation : Animation }
+    { blocks : List ( Coord, Shape.BlockColour ), animation : Animation, highScores : HighScores }
 
 
 type Model
     = Model ModelData
 
 
-init : Game shapeBuffer -> Model
-init game =
+init : HighScores -> Game shapeBuffer -> Model
+init highScores game =
     Model
         { blocks = (Game.blocks game).normal
         , animation = EnteringGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 }
+        , highScores = highScores
         }
 
 
@@ -135,7 +137,7 @@ view (Model modelData) =
                 [ Element.Border.width 2
                 , Element.centerX
                 , Element.centerY
-                , Element.Background.color UIHelpers.buttonBorderColor
+                , Element.Background.color UIHelpers.mainForegroundColour
                 , Element.padding 20
                 , Element.Border.rounded 20
                 , Element.Border.glow (Element.rgb255 200 200 200) messageGlow
@@ -196,6 +198,15 @@ calcViewInfo { animation } =
             , messageGlow = defaultMessageGlow - (defaultMessageGlow * percentComplete / 100)
             , entireOpacity = 1 - (percentComplete / 100)
             }
+
+
+
+-- HIGH SCORES
+
+
+getHighScores : Model -> HighScores
+getHighScores (Model { highScores }) =
+    highScores
 
 
 

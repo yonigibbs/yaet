@@ -1,4 +1,4 @@
-module UserGame exposing (Model, Msg, UpdateResult(..), boardViewConfig, init, subscriptions, update, view)
+module UserGame exposing (Model, Msg, UpdateResult(..), boardViewConfig, getSettings, init, subscriptions, update, view)
 
 {-| This module contains functionality related to a game being played by the user. The actual game logic itself is all
 in the `Game` module, but that module itself is, in a sense, "inert" - it doesn't do anything by itself, instead requiring
@@ -19,6 +19,7 @@ import GameBoard
 import HighlightAnimation
 import Process
 import Random
+import Settings exposing (Settings)
 import Shape exposing (Shape)
 import Task
 import Time
@@ -30,7 +31,7 @@ import UserGameControl
 
 
 type Model
-    = Initialising
+    = Initialising Settings
     | Playing PlayingModel
 
 
@@ -72,14 +73,15 @@ type alias PlayingModel =
     , highlightAnimation : Maybe HighlightAnimation.Model
     , nextAnimationId : HighlightAnimation.Id
     , gameControl : UserGameControl.Model
+    , settings : Settings
     }
 
 
 {-| Initialises the game - this involves getting the current time to act as a random seed for generating random shapes.
 -}
-init : ( Model, Cmd Msg )
-init =
-    ( Initialising, Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised) )
+init : Settings -> ( Model, Cmd Msg )
+init settings =
+    ( Initialising settings, Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised) )
 
 
 
@@ -104,8 +106,8 @@ type UpdateResult
 update : Msg -> Model -> UpdateResult
 update msg model =
     case ( model, msg ) of
-        ( Initialising, Initialised seed ) ->
-            Continue <| startNewGame seed
+        ( Initialising settings, Initialised seed ) ->
+            Continue <| startNewGame settings seed
 
         ( _, Initialised _ ) ->
             Continue ( model, Cmd.none )
@@ -139,8 +141,8 @@ update msg model =
 
 {-| Starts a new game after it's been initialised.
 -}
-startNewGame : Random.Seed -> ( Model, Cmd Msg )
-startNewGame seed =
+startNewGame : Settings -> Random.Seed -> ( Model, Cmd Msg )
+startNewGame settings seed =
     let
         newGame =
             Shape.createShapeBag seed |> Game.new Shape.next
@@ -153,7 +155,8 @@ startNewGame seed =
             , previewLandingBlocks = Game.previewLandingBlocks newGame
             , highlightAnimation = Nothing -- We know initially there is nothing highlighted.
             , nextAnimationId = HighlightAnimation.initialId
-            , gameControl = UserGameControl.init
+            , gameControl = UserGameControl.init settings
+            , settings = settings
             }
     in
     ( Playing playingModel, timerDropDelayCmd playingModel )
@@ -438,7 +441,7 @@ view model =
 
         { normalBlocks, previewLandingBlocks, highlightAnimation, showPauseOverlay } =
             case model of
-                Initialising ->
+                Initialising _ ->
                     { normalBlocks = [], previewLandingBlocks = [], highlightAnimation = Nothing, showPauseOverlay = False }
 
                 Playing playingModel ->
@@ -465,7 +468,7 @@ upcomingShapeView model =
     let
         ( upcomingShape, isPaused ) =
             case model of
-                Initialising ->
+                Initialising _ ->
                     ( Nothing, False )
 
                 Playing { game } ->
@@ -481,7 +484,7 @@ holdShapeView model =
     let
         ( holdShape, isPaused ) =
             case model of
-                Initialising ->
+                Initialising _ ->
                     ( Nothing, False )
 
                 Playing { game } ->
@@ -571,13 +574,27 @@ cellSize =
 
 
 
+-- SETTINGS
+
+
+getSettings : Model -> Settings
+getSettings model =
+    case model of
+        Initialising settings ->
+            settings
+
+        Playing { settings } ->
+            settings
+
+
+
 -- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
-        Initialising ->
+        Initialising _ ->
             Sub.none
 
         Playing { game, gameControl, timerDropDelay, timerDropMessageId, highlightAnimation } ->
