@@ -1,5 +1,7 @@
 import {Elm} from "./Main.elm"
 
+// Read the settings and high scores from local storage. This is sent into the Elm app as JSON which is decoded using
+// Elm. Any errors in decoding (or null values) result in the default settings and high scores being used instead.
 const settings = localStorage.getItem("settings")
 const highScores = localStorage.getItem("highScores")
 

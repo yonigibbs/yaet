@@ -1,5 +1,7 @@
 module HighScores exposing (HighScores, fromJson)
 
+-- TODO: document this when all implemented
+
 import Json.Encode as JE
 
 

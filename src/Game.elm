@@ -183,6 +183,8 @@ type UserAction
     | TogglePause
 
 
+{-| Gets a user-friendly string description of the given action.
+-}
 userActionDescription : UserAction -> String
 userActionDescription action =
     case action of

@@ -13,7 +13,6 @@ import Element.Border
 import Element.Font
 import Game exposing (Game)
 import HighScores exposing (HighScores)
-import Settings exposing (Settings)
 import Shape
 import UIHelpers
 import UserGame

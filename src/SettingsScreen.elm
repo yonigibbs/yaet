@@ -1,5 +1,9 @@
 module SettingsScreen exposing (Model, Msg, UpdateResult(..), init, subscriptions, update, view)
 
+{-| Contains all functionality related to the Settings screen. Both the screen that shows the settings, and the screen
+launched from it, which the user uses to assign a key binding.
+-}
+
 import Browser.Events
 import Element exposing (Element)
 import Element.Border
@@ -21,11 +25,29 @@ type Model
     = Model ModelData
 
 
+{-| The screen currently being shown:
+
+  - `SettingsScreen`: The screen showing all key bindings.
+  - `KeySelectionScreen`: The screen where the user can assign a different key binding to an action.
+
+-}
 type Screen
     = SettingsScreen
     | KeySelectionScreen { action : Game.UserAction, key : Maybe String }
 
 
+{-| The data associated with the main `Model`:
+
+  - `editableSettings`: The settings currently being edited. Might be in an invalid state temporarily (i.e. with some
+    action not having a key binding yet).
+  - `screen`: The screen currently being shown.
+  - `settingsToPersist`: The `Settings` value to persist if the user submits the settings screen as things stand. If the
+    `editableSettings` are valid, this will have a value, otherwise it will be `Nothing`. This is used to define whether
+    the dialog can be submitted or not. This value _could_ be calculated on demand from the `editableSettings`, but to
+    avoid this being done in multiple places the data is instead stored in the model and kept in-sync with the editable
+    copy of the settings.
+
+-}
 type alias ModelData =
     { editableSettings : EditableSettings, screen : Screen, settingsToPersist : Maybe Settings }
 
@@ -40,18 +62,24 @@ init settings =
 
 
 type Msg
-    = RestoreDefaultSettingsRequested
-    | SaveRequested
-    | CancelRequested
-    | KeySelectionScreenRequested Game.UserAction
-    | KeySelected String
+    = RestoreDefaultSettingsRequested -- The user has clicked the Restore Default Settings button on the Settings screen.
+    | SaveRequested -- The user has clicked the Save button (on either of the screens).
+    | CancelRequested -- The user has clicked the Cancel button (on either of the screens).
+    | KeySelectionScreenRequested Game.UserAction -- The user has clicked a key binding, requesting to change it
+    | KeySelected String -- The user has chosen a key to associate with a given action.
 
 
+{-| The result of the `update` call, telling the calling module whether to keep the Settings screen open or not. If
+closing, this also optionally supplies a new copy of the `Settings` to persist to local storage.
+-}
 type UpdateResult
     = KeepOpen
     | Close (Maybe Settings)
 
 
+{-| Updates the model based on the supplied message, and returns a new model and command, along with an `UpdateResult`
+value (see that type for more info).
+-}
 update : Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
 update msg ((Model ({ editableSettings, screen, settingsToPersist } as modelData)) as model) =
     let
@@ -142,6 +170,8 @@ view (Model modelData) =
             keySelectionView action key
 
 
+{-| The view when the Settings screen is being shown.
+-}
 settingsView : ModelData -> Element Msg
 settingsView ({ editableSettings, settingsToPersist } as modelData) =
     Element.column [ Element.Font.color UIHelpers.mainForegroundColour, Element.width Element.fill ]
@@ -154,12 +184,16 @@ settingsView ({ editableSettings, settingsToPersist } as modelData) =
         |> Modal.dialog (settingsScreenModalConfig modelData)
 
 
+{-| The config to use for the modal dialog when it's showing the Settings screen.
+-}
 settingsScreenModalConfig : { a | settingsToPersist : Maybe Settings } -> Modal.Config Msg
 settingsScreenModalConfig { settingsToPersist } =
     Modal.defaultConfig CancelRequested (Maybe.map (always SaveRequested) settingsToPersist)
         |> Modal.withCustomButton "Restore Defaults" (Just RestoreDefaultSettingsRequested)
 
 
+{-| The view when the screen where the user can assign a key binding is being shown.
+-}
 keySelectionView : Game.UserAction -> Maybe String -> Element Msg
 keySelectionView action key =
     let
@@ -178,11 +212,15 @@ keySelectionView action key =
         |> Modal.dialog (keySelectionScreenModalConfig key)
 
 
+{-| The config to use for the modal dialog when it's showing the key selection screen.
+-}
 keySelectionScreenModalConfig : Maybe String -> Modal.Config Msg
 keySelectionScreenModalConfig key =
     Modal.defaultConfig CancelRequested (Maybe.map (always SaveRequested) key)
 
 
+{-| A table of all the key bindings (actions to their corresponding keys).
+-}
 keyBindingsTable : EditableSettings -> Element Msg
 keyBindingsTable settings =
     let
@@ -249,24 +287,13 @@ keyDescription key =
             upperKey
 
 
+{-| All the keys that it's valid to assign as a key binding.
+-}
 allowedKeys : List String
 allowedKeys =
     -- ASCII 33 (exclamation mark) up to 126 (~) are all valid keys, as are the four arrows.
     (List.range 33 126 |> List.map (Char.fromCode >> String.fromChar))
         ++ [ " ", "ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp" ]
-
-
-keyBindingDecoder : JD.Decoder Msg
-keyBindingDecoder =
-    JD.field "key" JD.string
-        |> JD.andThen
-            (\key ->
-                if List.member key allowedKeys then
-                    Settings.sanitiseKey key |> KeySelected |> JD.succeed
-
-                else
-                    JD.fail ""
-            )
 
 
 
@@ -284,3 +311,16 @@ subscriptions (Model modelData) =
                 [ Browser.Events.onKeyDown keyBindingDecoder
                 , keySelectionScreenModalConfig key |> Modal.subscriptions
                 ]
+
+
+keyBindingDecoder : JD.Decoder Msg
+keyBindingDecoder =
+    JD.field "key" JD.string
+        |> JD.andThen
+            (\key ->
+                if List.member key allowedKeys then
+                    JD.succeed <| KeySelected key
+
+                else
+                    JD.fail ""
+            )

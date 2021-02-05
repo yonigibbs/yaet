@@ -84,16 +84,6 @@ init settings =
     ( Initialising settings, Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised) )
 
 
-getSettings : Model -> Settings
-getSettings model =
-    case model of
-        Initialising settings ->
-            settings
-
-        Playing { settings } ->
-            settings
-
-
 
 -- UPDATE
 
@@ -581,6 +571,20 @@ boardViewConfig =
 cellSize : Int
 cellSize =
     30
+
+
+
+-- SETTINGS
+
+
+getSettings : Model -> Settings
+getSettings model =
+    case model of
+        Initialising settings ->
+            settings
+
+        Playing { settings } ->
+            settings
 
 
 

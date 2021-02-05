@@ -125,9 +125,12 @@ type Msg
     | ShapeDropDelayElapsed -- The delay between each time the dropping shapes are lowered a row has elapsed
     | ShowSettingsRequested -- The user has requested to see the Settings modal
     | GotSettingsScreenMsg SettingsScreen.Msg -- The user has clicked Save on the settings modal
-    | StartGameRequested
+    | StartGameRequested -- The user has clicked the Start Game button
 
 
+{-| Returned from the `update` function. Defines whether the calling module should stay on the Welcome screen, or whether
+it should start a new game.
+-}
 type UpdateResult
     = Stay
     | StartGame

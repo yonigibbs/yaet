@@ -48,6 +48,9 @@ init { settings, highScores } =
     initAtWelcomeScreen (HighScores.fromJson highScores) (Settings.fromJson settings)
 
 
+{-| Initialiases the model at the welcome screen. Used when the site is first loaded, and at the end of a game (after the
+"Game Over" animation.
+-}
 initAtWelcomeScreen : HighScores -> Settings -> ( Model, Cmd Msg )
 initAtWelcomeScreen highScores settings =
     let
