@@ -6,6 +6,7 @@ module Game exposing
     , UserAction(..)
     , blocks
     , executeUserActions
+    , getScoring
     , holdShape
     , isPaused
     , new
@@ -37,6 +38,7 @@ import BoardView
 import Coord exposing (Coord)
 import DroppingShape exposing (DroppingShape)
 import GameBoard exposing (GameBoard)
+import Scoring exposing (Scoring)
 import Shape exposing (Shape)
 
 
@@ -64,6 +66,7 @@ type alias Model shapeBuffer =
     , nextShape : Shape -- The next shape to use as the dropping shape once the current one lands.
     , shapeBuffer : shapeBuffer -- A buffer used to get more shapes on demand.
     , holdInfo : Maybe HoldInfo -- Information about the shape currently in the Hold area, if any.
+    , scoring : Scoring
     }
 
 
@@ -141,6 +144,7 @@ new getShape shapeBuffer =
         , nextShape = nextShape
         , shapeBuffer = shapeBuffer_
         , holdInfo = Nothing
+        , scoring = Scoring.init
         }
 
 
@@ -501,7 +505,7 @@ nextValidRotatedDroppingShape droppingShape board =
 buffer to be the new "next" shape.
 -}
 handleDroppingShapeLanded : GetShape shapeBuffer -> DroppingShape -> Bool -> Model shapeBuffer -> UpdateResult shapeBuffer
-handleDroppingShapeLanded getShape droppingShape resetTimerDrop ({ state, board, nextShape } as model) =
+handleDroppingShapeLanded getShape droppingShape resetTimerDrop ({ state, board, nextShape, scoring } as model) =
     let
         { colour } =
             Shape.data droppingShape.shape
@@ -535,6 +539,7 @@ handleDroppingShapeLanded getShape droppingShape resetTimerDrop ({ state, board,
                                     { completedRowIndexes = completedRowIndexes
                                     , nextDroppingShape = newDroppingShape
                                     }
+                            , scoring = Scoring.plusRemovedLines (List.length completedRowIndexes) scoring
                         }
                 }
 
@@ -732,3 +737,8 @@ calcLandingPos board droppingShape =
 
     else
         droppingShape
+
+
+getScoring : Game shapeBuffer -> Scoring
+getScoring (Game { scoring }) =
+    scoring
