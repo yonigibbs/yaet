@@ -44,17 +44,18 @@ Current state: **WIP.**
 - [x] Settings/preferences, e.g. keyboard bindings (persisted to local storage)
     - [x] Let user close screen by pressing Escape key
 - [x] Update terminology in code - use soft/hard drop, and proper shape names, etc
-- [ ] Scores
-  - [ ] High scores (persisted to local storage)
+- [x] Scores
+- [ ] High scores (persisted to local storage)
 - [ ] Add link to get to source code, etc.
+- [ ] Make UI responsive.
+  - [ ] Buttons to use instead of keyboard for phones/tablets?
+- [ ] Prevent default on key presses? (Otherwise arrow keys can move viewport about if browser window small)
+  - [ ] See https://github.com/elm/browser/issues/89 - might need to use ports?
 - [ ] Some moves currently not possible? Investigate T-spin triple, for example.
 - [ ] Consolidate `id` fields used in messages/subscriptions/etc - put into a module and expose as opaque type?
   (e.g. `PlayingModel.timerDropMessageId`, `HighlightAnimation.Id`, etc.)
-- [ ] Prevent default on key presses? (Otherwise arrow keys can move viewport about if browser window small)
-    - [ ] See https://github.com/elm/browser/issues/89 - might need to use ports?
-- [ ] Make UI responsive.
-    - [ ] Buttons to use instead of keyboard for phones/tablets?
 - [ ] Let user pause/resume by clicking on game
+- [ ] Add bonus points for hard drop
 - [ ] Improve Game Over animation - drop the "Game Over" message down from top of board (use SVG for this?)
 - [ ] Use `elm-animator` instead of doing animations manually?
 - [ ] Add smoother transitions (e.g. fade out/in) between welcome screen and game screen
