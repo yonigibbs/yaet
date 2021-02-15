@@ -19,6 +19,7 @@ import GameBoard
 import HighlightAnimation
 import Process
 import Random
+import Scoring
 import Settings exposing (Settings)
 import Shape exposing (Shape)
 import Task
@@ -82,6 +83,16 @@ type alias PlayingModel =
 init : Settings -> ( Model, Cmd Msg )
 init settings =
     ( Initialising settings, Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised) )
+
+
+isGamePaused : Model -> Bool
+isGamePaused model =
+    case model of
+        Initialising _ ->
+            False
+
+        Playing { game } ->
+            Game.isPaused game
 
 
 
@@ -149,7 +160,7 @@ startNewGame settings seed =
 
         playingModel =
             { game = newGame
-            , timerDropDelay = 1000 -- TODO: hard-coded 1000 here - configurable? right value?
+            , timerDropDelay = initialTimerDropDelay
             , timerDropMessageId = 0
             , normalBlocks = Game.blocks newGame |> .normal
             , previewLandingBlocks = Game.previewLandingBlocks newGame
@@ -327,7 +338,9 @@ handleGameUpdateResult currentPlayingModel startNewTimerDropDelay gameUpdateResu
             in
             -- Don't call updateResultCmd here - if a row is being removed we _don't_ want a timer drop delay to start yet.
             Continue
-                ( nextPlayingModel |> withNewAnimation nextBlocks.highlighted HighlightAnimation.RowRemoval |> Playing
+                ( nextPlayingModel
+                    |> withNewAnimation nextBlocks.highlighted HighlightAnimation.RowRemoval
+                    |> Playing
                 , Cmd.none
                 )
 
@@ -372,6 +385,41 @@ totalAnimationTimeForType animationType { timerDropDelay } =
             150
 
 
+{-| The level at which we no longer get any faster.
+-}
+maxSpeedLevel : Int
+maxSpeedLevel =
+    31
+
+
+initialTimerDropDelay : Int
+initialTimerDropDelay =
+    1000
+
+
+maxTimerDropDelay : Int
+maxTimerDropDelay =
+    100
+
+
+{-| How much to increase the speed of dropping shapes every time a level increases.
+-}
+timerDropLevelDelta : Int
+timerDropLevelDelta =
+    toFloat (initialTimerDropDelay - maxTimerDropDelay)
+        / toFloat (maxSpeedLevel - 1)
+        |> floor
+
+
+timerDropDelayForLevel : Int -> Int
+timerDropDelayForLevel level =
+    let
+        level_ =
+            min maxSpeedLevel level
+    in
+    initialTimerDropDelay - ((level_ - 1) * timerDropLevelDelta)
+
+
 {-| Handles a message from the `HighlightAnimation` module. Passes the message to that module to handle then based on the
 result from that function updates this module's model.
 -}
@@ -414,7 +462,7 @@ handleAnimationMsg model msg =
                                         ( Playing
                                             { playingModel
                                                 | game = nextGame
-                                                , timerDropDelay = max (playingModel.timerDropDelay - 10) 100
+                                                , timerDropDelay = Game.getScoring nextGame |> Scoring.getLevel |> timerDropDelayForLevel
                                                 , normalBlocks = (Game.blocks nextGame).normal
                                                 , highlightAnimation = Nothing
                                                 , previewLandingBlocks = Game.previewLandingBlocks nextGame
@@ -437,7 +485,7 @@ view : Model -> Element msg
 view model =
     let
         screenSection content =
-            Element.el [ Element.width <| Element.px 400, Element.alignTop ] content
+            Element.el [ Element.width Element.shrink, Element.alignTop, Element.paddingXY 20 0 ] content
 
         { normalBlocks, previewLandingBlocks, highlightAnimation, showPauseOverlay } =
             case model of
@@ -452,8 +500,7 @@ view model =
                     }
     in
     Element.row [] <|
-        -- TODO: show scores
-        [ screenSection <| holdShapeView model
+        [ screenSection <| Element.column [ Element.spacingXY 0 50 ] [ holdShapeView model, scoringView model ]
         , screenSection <|
             Element.el [ Element.centerX ] <|
                 BoardView.view boardViewConfig showPauseOverlay normalBlocks previewLandingBlocks highlightAnimation
@@ -466,15 +513,15 @@ view model =
 upcomingShapeView : Model -> Element msg
 upcomingShapeView model =
     let
-        ( upcomingShape, isPaused ) =
+        upcomingShape =
             case model of
                 Initialising _ ->
-                    ( Nothing, False )
+                    Nothing
 
                 Playing { game } ->
-                    ( Just <| Game.upcomingShape game, Game.isPaused game )
+                    Just <| Game.upcomingShape game
     in
-    shapePreview Element.alignLeft isPaused "Coming next..." upcomingShape
+    shapePreview (isGamePaused model) "Coming next..." upcomingShape
 
 
 {-| Gets a view showing the upcoming shape in the game.
@@ -482,21 +529,21 @@ upcomingShapeView model =
 holdShapeView : Model -> Element msg
 holdShapeView model =
     let
-        ( holdShape, isPaused ) =
+        holdShape =
             case model of
                 Initialising _ ->
-                    ( Nothing, False )
+                    Nothing
 
                 Playing { game } ->
-                    ( Game.holdShape game, Game.isPaused game )
+                    Game.holdShape game
     in
-    shapePreview Element.alignRight isPaused "Hold" holdShape
+    shapePreview (isGamePaused model) "Hold" holdShape
 
 
 {-| Gets a rectangle showing a preview of a shape (e.g. the next shape to drop, or the shape currently on hold).
 -}
-shapePreview : Element.Attribute msg -> Bool -> String -> Maybe Shape -> Element msg
-shapePreview align isPaused caption maybeShape =
+shapePreview : Bool -> String -> Maybe Shape -> Element msg
+shapePreview isPaused caption maybeShape =
     let
         blocks =
             case maybeShape of
@@ -506,12 +553,54 @@ shapePreview align isPaused caption maybeShape =
                 Nothing ->
                     []
 
-        rowCount =
-            blocks |> List.map (.coord >> Tuple.second) |> List.maximum |> Maybe.withDefault 0 |> (+) 1
+        boardViewConfig_ =
+            { cellSize = cellSize
+            , rowCount = blocks |> List.map (.coord >> Tuple.second) |> List.maximum |> Maybe.withDefault 0 |> (+) 1
+            , colCount = blocks |> List.map (.coord >> Tuple.first) |> List.maximum |> Maybe.withDefault 0 |> (+) 1
+            , borderStyle = BoardView.None
+            , showGridLines = False
+            }
+    in
+    BoardView.view boardViewConfig_ False blocks [] Nothing
+        |> Element.el [ Element.centerX, Element.centerY, Element.centerX ]
+        |> sidePanelSection isPaused caption
 
-        colCount =
-            blocks |> List.map (.coord >> Tuple.first) |> List.maximum |> Maybe.withDefault 0 |> (+) 1
 
+{-| Gets a rectangle showing the scoring information for the game.
+-}
+scoringView : Model -> Element msg
+scoringView model =
+    let
+        ( points, level, lines ) =
+            case model of
+                Initialising _ ->
+                    ( 0, 1, 0 )
+
+                Playing { game } ->
+                    let
+                        scoring =
+                            Game.getScoring game
+                    in
+                    ( Scoring.getPoints scoring, Scoring.getLevel scoring, Scoring.getLines scoring )
+
+        row : String -> Int -> Element msg
+        row caption value =
+            Element.row [ Element.width Element.fill ]
+                [ Element.el [ Element.alignLeft ] <| Element.text caption
+                , Element.el [ Element.alignRight ] <| Element.text (String.fromInt value)
+                ]
+    in
+    Element.column [ Element.width Element.fill, Element.spacingXY 0 5, Element.Font.semiBold, Element.Font.size 18 ]
+        [ row "Points" points, row "Level" level, row "Lines" lines ]
+        |> sidePanelSection (isGamePaused model) "Score"
+
+
+{-| Gets a section to show to the left or right of the game, namely a rectangle showing the supplied contents (e.g. the
+next dropping shape), styled in a consistent way.
+-}
+sidePanelSection : Bool -> String -> Element msg -> Element msg
+sidePanelSection isPaused caption contents =
+    let
         pauseOverlay =
             if isPaused then
                 [ Element.inFront <|
@@ -529,8 +618,9 @@ shapePreview align isPaused caption maybeShape =
                 []
     in
     Element.column
-        ([ Element.padding 14
-         , Element.spacing 20
+        ([ Element.spacing 20
+         , Element.centerX
+         , Element.padding 14
          , Element.Background.color <| Element.rgb255 0 0 0
          , Element.height <| Element.px 140
          , Element.width <| Element.px 180
@@ -538,19 +628,13 @@ shapePreview align isPaused caption maybeShape =
          , Element.Border.width 2
          , Element.Border.rounded 20
          , Element.Border.glow (Element.rgb255 200 200 200) 0.2
-         , align
+         , Element.Font.color <| Element.rgb255 100 100 100
          ]
             ++ pauseOverlay
         )
-        [ Element.el [ Element.centerX, Element.Font.color <| Element.rgb255 100 100 100, Element.Font.semiBold ] <|
+        [ Element.el [ Element.Font.bold, Element.centerX ] <|
             Element.text caption
-        , Element.el [ Element.centerX, Element.centerY, Element.centerX ] <|
-            BoardView.view
-                { cellSize = cellSize, rowCount = rowCount, colCount = colCount, borderStyle = BoardView.None, showGridLines = False }
-                False
-                blocks
-                []
-                Nothing
+        , contents
         ]
 
 
