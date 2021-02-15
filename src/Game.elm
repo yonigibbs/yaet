@@ -66,7 +66,7 @@ type alias Model shapeBuffer =
     , nextShape : Shape -- The next shape to use as the dropping shape once the current one lands.
     , shapeBuffer : shapeBuffer -- A buffer used to get more shapes on demand.
     , holdInfo : Maybe HoldInfo -- Information about the shape currently in the Hold area, if any.
-    , scoring : Scoring
+    , scoring : Scoring -- All information about the score in the game (points, level, etc).
     }
 
 
@@ -739,6 +739,8 @@ calcLandingPos board droppingShape =
         droppingShape
 
 
+{-| Gets the scoring information for the supplied game.
+-}
 getScoring : Game shapeBuffer -> Scoring
 getScoring (Game { scoring }) =
     scoring

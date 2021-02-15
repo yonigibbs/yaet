@@ -385,6 +385,8 @@ totalAnimationTimeForType animationType { timerDropDelay } =
             150
 
 
+{-| The level at which we no longer get any faster.
+-}
 maxSpeedLevel : Int
 maxSpeedLevel =
     31
@@ -400,6 +402,8 @@ maxTimerDropDelay =
     100
 
 
+{-| How much to increase the speed of dropping shapes every time a level increases.
+-}
 timerDropLevelDelta : Int
 timerDropLevelDelta =
     toFloat (initialTimerDropDelay - maxTimerDropDelay)
@@ -562,6 +566,8 @@ shapePreview isPaused caption maybeShape =
         |> sidePanelSection isPaused caption
 
 
+{-| Gets a rectangle showing the scoring information for the game.
+-}
 scoringView : Model -> Element msg
 scoringView model =
     let
@@ -589,6 +595,9 @@ scoringView model =
         |> sidePanelSection (isGamePaused model) "Score"
 
 
+{-| Gets a section to show to the left or right of the game, namely a rectangle showing the supplied contents (e.g. the
+next dropping shape), styled in a consistent way.
+-}
 sidePanelSection : Bool -> String -> Element msg -> Element msg
 sidePanelSection isPaused caption contents =
     let
