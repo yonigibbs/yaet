@@ -2,6 +2,9 @@ module GameOver exposing (Model, Msg, UpdateResult(..), getHighScores, init, sub
 
 {-| This module handles all functionality related to when a game is over. Shows the board as it was when the game ended,
 animating a "Game Over" message on top of it, then fading the game out.
+
+Also responsible for asking the user to fill in their high scores, if a new high score was achieved.
+
 -}
 
 import BoardView
@@ -11,10 +14,13 @@ import Element exposing (Element)
 import Element.Background
 import Element.Border
 import Element.Font
+import Element.Input
 import Game exposing (Game)
-import HighScores exposing (HighScores)
+import HighScores exposing (EditableHighScores, HighScores)
+import Modal
+import Scoring
 import Shape
-import UIHelpers
+import UIHelpers exposing (edges)
 import UserGame
 
 
@@ -36,10 +42,15 @@ type Animation
     | FadingOut AnimationModel
 
 
+type ScreenState
+    = Animating Animation
+    | ShowingHighScores EditableHighScores
+
+
 {-| The data associated with the model (which is an opaque type).
 -}
 type alias ModelData =
-    { blocks : List ( Coord, Shape.BlockColour ), animation : Animation, highScores : HighScores }
+    { blocks : List ( Coord, Shape.BlockColour ), state : ScreenState, score : Int, highScores : HighScores }
 
 
 type Model
@@ -50,7 +61,8 @@ init : HighScores -> Game shapeBuffer -> Model
 init highScores game =
     Model
         { blocks = (Game.blocks game).normal
-        , animation = EnteringGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 }
+        , state = Animating <| EnteringGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 }
+        , score = game |> Game.getScoring |> Scoring.getPoints
         , highScores = highScores
         }
 
@@ -61,6 +73,9 @@ init highScores game =
 
 type Msg
     = AnimationFrame Float
+    | HighScoreNameChanged String
+    | HighScoreCancelled
+    | HighScoreSubmitted
 
 
 {-| The value returned from the `update` function. Either `Continue`, meaning the game over animation is still in action,
@@ -75,24 +90,47 @@ type UpdateResult
 of how to proceed (see `UpdateResult` for more info).
 -}
 update : Msg -> Model -> UpdateResult
-update (AnimationFrame timeSinceLastFrameMs) (Model model) =
-    case model.animation of
-        EnteringGameOverMessage animationModel ->
-            progressAnimation model
+update msg ((Model modelData) as model) =
+    case ( msg, modelData.state ) of
+        ( AnimationFrame timeSinceLastFrameMs, Animating (EnteringGameOverMessage animationModel) ) ->
+            progressAnimation modelData
                 timeSinceLastFrameMs
                 animationModel
                 EnteringGameOverMessage
-                (Just <| ShowingGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 })
+                (Just <| Animating <| ShowingGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 })
 
-        ShowingGameOverMessage animationModel ->
-            progressAnimation model
-                timeSinceLastFrameMs
-                animationModel
-                ShowingGameOverMessage
-                (Just <| FadingOut { totalTimeMs = 500, elapsedTimeMs = 0 })
+        ( AnimationFrame timeSinceLastFrameMs, Animating (ShowingGameOverMessage animationModel) ) ->
+            let
+                ifAnimationOver =
+                    case HighScores.withPossibleNewHighScore modelData.score modelData.highScores of
+                        Just editableHighScores ->
+                            Just <| ShowingHighScores editableHighScores
 
-        FadingOut animationModel ->
-            progressAnimation model timeSinceLastFrameMs animationModel FadingOut Nothing
+                        Nothing ->
+                            -- Score wasn't high enough to be a new high score - when animation ends just fade out then
+                            -- return to Welcome screen
+                            Just <| Animating <| FadingOut { totalTimeMs = 500, elapsedTimeMs = 0 }
+            in
+            progressAnimation modelData timeSinceLastFrameMs animationModel ShowingGameOverMessage ifAnimationOver
+
+        ( AnimationFrame timeSinceLastFrameMs, Animating (FadingOut animationModel) ) ->
+            progressAnimation modelData timeSinceLastFrameMs animationModel FadingOut Nothing
+
+        ( AnimationFrame _, ShowingHighScores _ ) ->
+            Continue model
+
+        ( HighScoreNameChanged name, ShowingHighScores editableHighScores ) ->
+            Continue <| Model { modelData | state = ShowingHighScores <| HighScores.setName name editableHighScores }
+
+        ( HighScoreNameChanged _, Animating _ ) ->
+            Continue model
+
+        ( HighScoreCancelled, _ ) ->
+            Done
+
+        ( HighScoreSubmitted, _ ) ->
+            -- TODO: persist new highscores
+            Done
 
 
 {-| Progresses the animation after an animation frame. Each animation knows the total time it should run for so this will
@@ -101,7 +139,7 @@ either continue the current animation if not enough time has elapsed yet (using 
 whole module is now finished and the user should be returned to the Welcome screen. Otherwise (i.e. if `ifAnimationOver`
 is `Just` some `Animation`, then that `Animation` is used (i.e. the next stage in the overall animation proceeds).
 -}
-progressAnimation : ModelData -> Float -> AnimationModel -> (AnimationModel -> Animation) -> Maybe Animation -> UpdateResult
+progressAnimation : ModelData -> Float -> AnimationModel -> (AnimationModel -> Animation) -> Maybe ScreenState -> UpdateResult
 progressAnimation modelData timeSinceLastFrameMs animationModel ifAnimationContinuing ifAnimationOver =
     let
         newElapsedTimeMs =
@@ -110,12 +148,12 @@ progressAnimation modelData timeSinceLastFrameMs animationModel ifAnimationConti
     if newElapsedTimeMs < animationModel.totalTimeMs then
         { animationModel | elapsedTimeMs = newElapsedTimeMs }
             |> ifAnimationContinuing
-            |> (\continuingAnimation -> Model { modelData | animation = continuingAnimation })
+            |> (\continuingAnimation -> Model { modelData | state = Animating continuingAnimation })
             |> Continue
 
     else
         ifAnimationOver
-            |> Maybe.map (\nextAnimation -> Continue <| Model { modelData | animation = nextAnimation })
+            |> Maybe.map (\nextState -> Continue <| Model { modelData | state = nextState })
             |> Maybe.withDefault Done
 
 
@@ -123,37 +161,90 @@ progressAnimation modelData timeSinceLastFrameMs animationModel ifAnimationConti
 -- VIEW
 
 
-view : Model -> Element msg
+view : Model -> Element Msg
 view (Model modelData) =
     let
-        { messageOpacity, messageGlow, entireOpacity } =
-            calcViewInfo modelData
-
         boardView =
             BoardView.view UserGame.boardViewConfig False (modelData.blocks |> BoardView.withOpacity 1) [] Nothing
 
-        gameOverOverlay =
-            Element.row
-                [ Element.Border.width 2
-                , Element.centerX
-                , Element.centerY
-                , Element.Background.color UIHelpers.mainForegroundColour
-                , Element.padding 20
-                , Element.Border.rounded 20
-                , Element.Border.glow (Element.rgb255 200 200 200) messageGlow
-                , Element.Font.size 32
-                , Element.Font.extraBold
-                , Element.Font.color UIHelpers.mainBackgroundColour
-                , Element.Font.family [ Element.Font.typeface "Courier New" ]
-                , Element.alpha messageOpacity
-                ]
-                [ Element.text "Game Over" ]
+        ( overlay, opacity ) =
+            case modelData.state of
+                Animating animation ->
+                    gameOverOverlay animation
+
+                ShowingHighScores editableHighScores ->
+                    -- TODO: overlay game view with semi-opaque div?
+                    ( Modal.dialog (Modal.defaultConfig HighScoreCancelled (Just HighScoreSubmitted)) <| highScoresView editableHighScores, 1.0 )
     in
-    Element.el [ Element.inFront gameOverOverlay, Element.alpha entireOpacity ] boardView
+    Element.el [ Element.inFront overlay, Element.alpha opacity ] boardView
 
 
-calcViewInfo : ModelData -> { messageOpacity : Float, messageGlow : Float, entireOpacity : Float }
-calcViewInfo { animation } =
+highScoresView : EditableHighScores -> Element Msg
+highScoresView editableHighScores =
+    Element.column
+        [ Element.spacing 15
+        , Element.centerX
+        , Element.paddingXY 4 0
+        , Element.width <| Element.px 240
+        , Element.Font.color <| Element.rgb255 200 200 200
+        ]
+        [ Element.el [ Element.centerX, Element.Font.bold, Element.Font.size 24 ] <| Element.text "New High Score"
+        , Element.el [ Element.Font.size 18 ] <| highScoresTable editableHighScores
+        ]
+
+
+highScoresTable : EditableHighScores -> Element Msg
+highScoresTable editableHighScores =
+    editableHighScores
+        |> HighScores.map (highScoreRow False) (highScoreRow True)
+        |> Element.column [ Element.spacingXY 0 5 ]
+
+
+highScoreRow : Bool -> HighScores.Entry -> Element Msg
+highScoreRow isEditable { name, score } =
+    let
+        nameElement =
+            if isEditable then
+                Element.Input.text
+                    [ Element.Background.color <| Element.rgb255 100 100 100, Element.padding 6, Element.Font.semiBold ]
+                    { text = name, label = Element.Input.labelHidden "Name", onChange = HighScoreNameChanged, placeholder = Nothing }
+
+            else
+                Element.text name
+    in
+    Element.row [ Element.width Element.fill, Element.spacing 20 ]
+        [ Element.el [ Element.alignLeft, Element.width Element.fill ] <| nameElement
+        , Element.el [ Element.alignRight ] <| Element.text (String.fromInt score)
+        ]
+
+
+gameOverOverlay : Animation -> ( Element msg, Float )
+gameOverOverlay animation =
+    let
+        { messageOpacity, messageGlow, entireOpacity } =
+            calcGameOverMsgViewInfo animation
+    in
+    ( Element.row
+        [ Element.centerX
+        , Element.centerY
+        , Element.Border.width 2
+        , Element.Background.color UIHelpers.mainForegroundColour
+        , Element.padding 20
+        , Element.Border.rounded 20
+        , Element.Border.glow (Element.rgb255 200 200 200) messageGlow
+        , Element.Font.size 32
+        , Element.Font.extraBold
+        , Element.Font.color UIHelpers.mainBackgroundColour
+        , Element.Font.family [ Element.Font.typeface "Courier New" ]
+        , Element.alpha messageOpacity
+        ]
+        [ Element.text "Game Over" ]
+    , entireOpacity
+    )
+
+
+calcGameOverMsgViewInfo : Animation -> { messageOpacity : Float, messageGlow : Float, entireOpacity : Float }
+calcGameOverMsgViewInfo animation =
     let
         defaultMessageGlow =
             5
@@ -213,6 +304,11 @@ getHighScores (Model { highScores }) =
 -- SUBSCRIPTIONS
 
 
-subscriptions : Sub Msg
-subscriptions =
-    Browser.Events.onAnimationFrameDelta AnimationFrame
+subscriptions : Model -> Sub Msg
+subscriptions (Model { state }) =
+    case state of
+        Animating _ ->
+            Browser.Events.onAnimationFrameDelta AnimationFrame
+
+        ShowingHighScores _ ->
+            Sub.none

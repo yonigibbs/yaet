@@ -176,7 +176,7 @@ view model =
                     -- TODO: the below assumes there are no highlighted blocks when the game ends, but the type system doesn't
                     -- currently guarantee that (Game.handleDroppingShapeLanded can result in GameOver even when its state is
                     -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
-                    GameOver.view gameOver.model |> wrapBoardView
+                    GameOver.view gameOver.model |> Element.map GotGameOverMsg |> wrapBoardView
     in
     Element.layoutWith
         { options =
@@ -215,5 +215,5 @@ subscriptions model =
         Playing playing ->
             UserGame.subscriptions playing.model |> Sub.map GotPlayingGameMsg
 
-        GameOver _ ->
-            GameOver.subscriptions |> Sub.map GotGameOverMsg
+        GameOver gameOver ->
+            GameOver.subscriptions gameOver.model |> Sub.map GotGameOverMsg
