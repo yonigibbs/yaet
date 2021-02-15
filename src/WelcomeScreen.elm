@@ -440,12 +440,7 @@ view (Model { animatedBoard, settings, settingsScreen }) =
                     []
     in
     Element.column
-        ([ Element.spacingXY 0 25
-         , Element.height Element.fill
-         , Element.width Element.fill
-         ]
-            ++ modalAttr
-        )
+        ([ Element.spacingXY 0 25, Element.height Element.fill, Element.width Element.fill ] ++ modalAttr)
         [ Element.el [ Element.centerX ] <| BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
         , Element.row [ Element.centerX, Element.spacingXY 20 0 ]
             [ button settingsScreen "Start Game" StartGameRequested

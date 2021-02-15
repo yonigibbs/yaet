@@ -45,20 +45,20 @@ type alias Flags =
 
 init : Flags -> ( Model, Cmd Msg )
 init { settings, highScores } =
-    initAtWelcomeScreen (HighScores.fromJson highScores) (Settings.fromJson settings)
+    initAtWelcomeScreen (HighScores.fromJson highScores) (Settings.fromJson settings) Cmd.none
 
 
-{-| Initialiases the model at the welcome screen. Used when the site is first loaded, and at the end of a game (after the
+{-| Initialises the model at the welcome screen. Used when the site is first loaded, and at the end of a game (after the
 "Game Over" animation.
 -}
-initAtWelcomeScreen : HighScores -> Settings -> ( Model, Cmd Msg )
-initAtWelcomeScreen highScores settings =
+initAtWelcomeScreen : HighScores -> Settings -> Cmd Msg -> ( Model, Cmd Msg )
+initAtWelcomeScreen highScores settings cmd =
     let
         ( subModel, subCmd ) =
             WelcomeScreen.init settings
     in
     ( Welcome { model = subModel, highScores = highScores }
-    , Cmd.map GotWelcomeScreenMsg subCmd
+    , Cmd.batch [ cmd, Cmd.map GotWelcomeScreenMsg subCmd ]
     )
 
 
@@ -149,11 +149,11 @@ handlePlayingGameMsg gameMsg playing =
 handleGameOverMsg : GameOver.Msg -> { model : GameOver.Model, settings : Settings } -> ( Model, Cmd Msg )
 handleGameOverMsg gameOverMsg gameOver =
     case GameOver.update gameOverMsg gameOver.model of
-        GameOver.Continue subModel ->
-            ( GameOver { gameOver | model = subModel }, Cmd.none )
+        GameOver.Continue ( subModel, subCmd ) ->
+            ( GameOver { gameOver | model = subModel }, Cmd.map GotGameOverMsg subCmd )
 
-        GameOver.Done ->
-            initAtWelcomeScreen (GameOver.getHighScores gameOver.model) gameOver.settings
+        GameOver.Done ( subModel, subCmd ) ->
+            initAtWelcomeScreen (GameOver.getHighScores subModel) gameOver.settings <| Cmd.map GotGameOverMsg subCmd
 
 
 
@@ -176,7 +176,7 @@ view model =
                     -- TODO: the below assumes there are no highlighted blocks when the game ends, but the type system doesn't
                     -- currently guarantee that (Game.handleDroppingShapeLanded can result in GameOver even when its state is
                     -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
-                    GameOver.view gameOver.model |> wrapBoardView
+                    GameOver.view gameOver.model |> Element.map GotGameOverMsg |> wrapBoardView
     in
     Element.layoutWith
         { options =
@@ -215,5 +215,5 @@ subscriptions model =
         Playing playing ->
             UserGame.subscriptions playing.model |> Sub.map GotPlayingGameMsg
 
-        GameOver _ ->
-            GameOver.subscriptions |> Sub.map GotGameOverMsg
+        GameOver gameOver ->
+            GameOver.subscriptions gameOver.model |> Sub.map GotGameOverMsg
