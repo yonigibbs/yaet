@@ -92,6 +92,8 @@ type alias ModelData =
     { animatedBoard : AnimatedBoard, settings : Settings, highScores : HighScores, modal : ModalDialog }
 
 
+{-| Defines what modal (if any) is currently shown over the welcome screen.
+-}
 type ModalDialog
     = NoModal
     | SettingsModal SettingsScreen.Model

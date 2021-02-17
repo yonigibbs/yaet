@@ -15,7 +15,7 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Game exposing (Game)
-import HighScores exposing (HighScores, NewHighScoreModel)
+import HighScores exposing (HighScores)
 import Scoring
 import Shape
 import UIHelpers
@@ -40,9 +40,16 @@ type Animation
     | FadingOut AnimationModel
 
 
+{-| The state that the screen is currently at:
+
+  - `Animating`: The "Game Over" animation is in progress.
+  - `HandlingNewHighScore`: The user achieved a new high score and is being prompted for a name to store against when
+    saving the high scores.
+
+-}
 type ScreenState
     = Animating Animation
-    | HandlingNewHighScore NewHighScoreModel
+    | HandlingNewHighScore HighScores.NewHighScoreModel
 
 
 {-| The data associated with the model (which is an opaque type).
@@ -74,8 +81,9 @@ type Msg
     | GotNewHighScoreDialogMsg HighScores.NewHighScoreMsg
 
 
-{-| The value returned from the `update` function. Either `Continue`, meaning the game over animation is still in action,
-or `Done`, meaning it's finished and the calling module should now return the user to the welcome screen.
+{-| The value returned from the `update` function. Either `Continue`, meaning the game over animation is still in action
+(or the user is entering the name for a new high score), or `Done`, meaning it's finished and the calling module should
+now return the user to the welcome screen.
 -}
 type UpdateResult
     = Continue ( Model, Cmd Msg )
@@ -104,6 +112,7 @@ update msg ((Model modelData) as model) =
                 ifAnimationOver =
                     case HighScores.initNewHighScoreDialog modelData.score modelData.highScores of
                         Just ( subModel, subCmd ) ->
+                            -- The user achieved a new high score - show the New High Score dialog.
                             Just ( HandlingNewHighScore subModel, Cmd.map GotNewHighScoreDialogMsg subCmd )
 
                         Nothing ->
@@ -123,6 +132,9 @@ update msg ((Model modelData) as model) =
             handleNewHighScoreDialogMsg subMsg model
 
 
+{-| Handles a message from the New High Score dialog. Delegates its handling to that module, and responds to the result
+of that `update...` call accordingly (e.g. by closing that dialog if finished).
+-}
 handleNewHighScoreDialogMsg : HighScores.NewHighScoreMsg -> Model -> UpdateResult
 handleNewHighScoreDialogMsg msg ((Model modelData) as model) =
     case modelData.state of
@@ -148,7 +160,7 @@ handleNewHighScoreDialogMsg msg ((Model modelData) as model) =
 either continue the current animation if not enough time has elapsed yet (using `ifAnimationContinuing`) or will use
 `ifAnimationOver` to decide how to proceed. If that parameter is a `Nothing` then `Done` is returned, meaning this
 whole module is now finished and the user should be returned to the Welcome screen. Otherwise (i.e. if `ifAnimationOver`
-is `Just` some `Animation`, then that `Animation` is used (i.e. the next stage in the overall animation proceeds).
+is `Just` some `ScreenState`) then that `ScreenState` is used (e.g. the next stage in the overall animation might proceed).
 -}
 progressAnimation : Model -> Float -> AnimationModel -> (AnimationModel -> Animation) -> Maybe ( ScreenState, Cmd Msg ) -> UpdateResult
 progressAnimation ((Model modelData) as model) timeSinceLastFrameMs animationModel ifAnimationContinuing ifAnimationOver =
@@ -188,6 +200,8 @@ view (Model modelData) =
     Element.el [ Element.inFront overlay, Element.alpha opacity ] boardView
 
 
+{-| The "Game Over" message overlaid on top of the game board.
+-}
 gameOverOverlay : Animation -> ( Element msg, Float )
 gameOverOverlay animation =
     let
