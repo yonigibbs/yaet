@@ -8,7 +8,6 @@ Also responsible for asking the user to fill in their high scores, if a new high
 -}
 
 import BoardView
-import Browser.Dom
 import Browser.Events
 import Coord exposing (Coord)
 import Element exposing (Element)
@@ -16,12 +15,9 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Game exposing (Game)
-import HighScores exposing (EditableHighScores, HighScores)
-import Modal
-import Ports
+import HighScores exposing (HighScores, NewHighScoreModel)
 import Scoring
 import Shape
-import Task
 import UIHelpers
 import UserGame
 
@@ -46,7 +42,7 @@ type Animation
 
 type ScreenState
     = Animating Animation
-    | ShowingHighScores EditableHighScores
+    | HandlingNewHighScore NewHighScoreModel
 
 
 {-| The data associated with the model (which is an opaque type).
@@ -107,11 +103,8 @@ update msg ((Model modelData) as model) =
             let
                 ifAnimationOver =
                     case HighScores.initNewHighScoreDialog modelData.score modelData.highScores of
-                        Just ( editableHighScores, subCmd ) ->
-                            Just
-                                ( ShowingHighScores editableHighScores
-                                , Cmd.map GotNewHighScoreDialogMsg subCmd
-                                )
+                        Just ( subModel, subCmd ) ->
+                            Just ( HandlingNewHighScore subModel, Cmd.map GotNewHighScoreDialogMsg subCmd )
 
                         Nothing ->
                             -- Score wasn't high enough to be a new high score - when animation ends just fade out then
@@ -123,7 +116,7 @@ update msg ((Model modelData) as model) =
         ( AnimationFrame timeSinceLastFrameMs, Animating (FadingOut animationModel) ) ->
             progressAnimation model timeSinceLastFrameMs animationModel FadingOut Nothing
 
-        ( AnimationFrame _, ShowingHighScores _ ) ->
+        ( AnimationFrame _, HandlingNewHighScore _ ) ->
             ignore
 
         ( GotNewHighScoreDialogMsg subMsg, _ ) ->
@@ -136,10 +129,10 @@ handleNewHighScoreDialogMsg msg ((Model modelData) as model) =
         Animating _ ->
             Continue ( model, Cmd.none )
 
-        ShowingHighScores editableHighScores ->
-            case HighScores.updateNewHighScoreDialog msg editableHighScores of
-                HighScores.KeepOpen newEditableHighScores ->
-                    Continue <| ( Model { modelData | state = ShowingHighScores newEditableHighScores }, Cmd.none )
+        HandlingNewHighScore newHighScoreModel ->
+            case HighScores.updateNewHighScoreDialog msg newHighScoreModel of
+                HighScores.KeepOpen nextNewHighScoreModel ->
+                    Continue <| ( Model { modelData | state = HandlingNewHighScore nextNewHighScoreModel }, Cmd.none )
 
                 HighScores.Close (Just ( newHighScores, subCmd )) ->
                     Done
@@ -189,8 +182,8 @@ view (Model modelData) =
                 Animating animation ->
                     gameOverOverlay animation
 
-                ShowingHighScores editableHighScores ->
-                    ( HighScores.newHighScoreView editableHighScores |> Element.map GotNewHighScoreDialogMsg, 1.0 )
+                HandlingNewHighScore newHighScoreModel ->
+                    ( HighScores.newHighScoreView newHighScoreModel |> Element.map GotNewHighScoreDialogMsg, 1.0 )
     in
     Element.el [ Element.inFront overlay, Element.alpha opacity ] boardView
 
@@ -287,5 +280,5 @@ subscriptions (Model { state }) =
         Animating _ ->
             Browser.Events.onAnimationFrameDelta AnimationFrame
 
-        ShowingHighScores editableHighScores ->
-            HighScores.newHighScoreDialogSubscriptions editableHighScores |> Sub.map GotNewHighScoreDialogMsg
+        HandlingNewHighScore newHighScoreModel ->
+            HighScores.newHighScoreDialogSubscriptions newHighScoreModel |> Sub.map GotNewHighScoreDialogMsg

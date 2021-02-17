@@ -1,4 +1,4 @@
-module WelcomeScreen exposing (Model, Msg, UpdateResult(..), getSettings, init, subscriptions, update, view)
+module WelcomeScreen exposing (Model, Msg, UpdateResult(..), getHighScores, getSettings, init, subscriptions, update, view)
 
 {-| This module contains all functionality related to the welcome screen. Manages the animated board and functionality
 available from the Welcome screen, e.g. the Settings.
@@ -10,6 +10,7 @@ import Button
 import Coord exposing (Coord)
 import DroppingShape exposing (DroppingShape)
 import Element exposing (Element)
+import HighScores exposing (HighScores)
 import HighlightAnimation
 import Random
 import Random.Array
@@ -88,7 +89,13 @@ type Model
 
 
 type alias ModelData =
-    { animatedBoard : AnimatedBoard, settings : Settings, settingsScreen : Maybe SettingsScreen.Model }
+    { animatedBoard : AnimatedBoard, settings : Settings, highScores : HighScores, modal : ModalDialog }
+
+
+type ModalDialog
+    = NoModal
+    | SettingsModal SettingsScreen.Model
+    | HighScoresModal HighScores.HighScoresModel
 
 
 {-| The state of the animated board on the Welcome screen. Defines the three stages of the animation, along with an
@@ -107,9 +114,9 @@ type AnimatedBoard
     | DroppingRandomShapes DroppingRandomShapesData
 
 
-init : Settings -> ( Model, Cmd Msg )
-init settings =
-    ( Model { animatedBoard = Initialising, settings = settings, settingsScreen = Nothing }
+init : Settings -> HighScores -> ( Model, Cmd Msg )
+init settings highScores =
+    ( Model { animatedBoard = Initialising, settings = settings, highScores = highScores, modal = NoModal }
     , Time.now |> Task.perform (Time.posixToMillis >> Random.initialSeed >> Initialised)
     )
 
@@ -123,9 +130,11 @@ type Msg
     | LetterDropAnimationFrame -- A letter should be dropped another row (or a new letter added)
     | GotHighlightAnimationMsg HighlightAnimation.Msg -- A pulsing animation frame has occurred
     | ShapeDropDelayElapsed -- The delay between each time the dropping shapes are lowered a row has elapsed
-    | ShowSettingsRequested -- The user has requested to see the Settings modal
-    | GotSettingsScreenMsg SettingsScreen.Msg -- The user has clicked Save on the settings modal
     | StartGameRequested -- The user has clicked the Start Game button
+    | ShowSettingsRequested -- The user has requested to see the Settings modal
+    | GotSettingsScreenMsg SettingsScreen.Msg -- A message from Settings modal: handled by it
+    | ShowHighScoresRequested -- The user has requested to see the High Scores modal
+    | GotHighScoresScreenMsg HighScores.HighScoresMsg -- A message from High Scores modal: handled by it
 
 
 {-| Returned from the `update` function. Defines whether the calling module should stay on the Welcome screen, or whether
@@ -138,54 +147,52 @@ type UpdateResult
 
 update : Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
 update msg ((Model { animatedBoard }) as model) =
+    let
+        stay ( nextModel, nextCmd ) =
+            ( nextModel, nextCmd, Stay )
+    in
     case ( msg, animatedBoard ) of
         ( Initialised randomSeed, Initialising ) ->
-            ( model |> withAnimatedBoard (initDroppingLetters randomSeed |> DroppingLetters)
-            , Cmd.none
-            , Stay
-            )
+            stay ( model |> withAnimatedBoard (initDroppingLetters randomSeed |> DroppingLetters), Cmd.none )
 
         ( Initialised _, _ ) ->
-            ( model, Cmd.none, Stay )
+            stay ( model, Cmd.none )
 
         ( LetterDropAnimationFrame, DroppingLetters data ) ->
-            ( model |> withAnimatedBoard (onLetterDropAnimationFrame data)
-            , Cmd.none
-            , Stay
-            )
+            stay ( model |> withAnimatedBoard (onLetterDropAnimationFrame data), Cmd.none )
 
         ( LetterDropAnimationFrame, _ ) ->
-            ( model, Cmd.none, Stay )
+            stay ( model, Cmd.none )
 
         ( GotHighlightAnimationMsg highlightAnimationMsg, PulsingLetters data ) ->
-            ( model |> withAnimatedBoard (onPulsingLettersAnimationFrame animatedBoard highlightAnimationMsg data)
-            , Cmd.none
-            , Stay
-            )
+            stay
+                ( model |> withAnimatedBoard (onPulsingLettersAnimationFrame animatedBoard highlightAnimationMsg data)
+                , Cmd.none
+                )
 
         ( GotHighlightAnimationMsg _, _ ) ->
-            ( model, Cmd.none, Stay )
+            stay ( model, Cmd.none )
 
         ( ShapeDropDelayElapsed, DroppingRandomShapes data ) ->
-            ( model |> withAnimatedBoard (handleShapeDropDelayElapsed data |> DroppingRandomShapes)
-            , Cmd.none
-            , Stay
-            )
+            stay ( model |> withAnimatedBoard (handleShapeDropDelayElapsed data |> DroppingRandomShapes), Cmd.none )
 
         ( ShapeDropDelayElapsed, _ ) ->
-            ( model, Cmd.none, Stay )
+            stay ( model, Cmd.none )
 
         ( ShowSettingsRequested, _ ) ->
-            ( showSettingsScreen model
-            , Cmd.none
-            , Stay
-            )
+            stay ( showSettingsScreen model, Cmd.none )
 
         ( GotSettingsScreenMsg subMsg, _ ) ->
-            handleSettingsScreenMsg subMsg model
+            stay <| handleSettingsScreenMsg subMsg model
 
         ( StartGameRequested, _ ) ->
             ( model, Cmd.none, StartGame )
+
+        ( ShowHighScoresRequested, _ ) ->
+            stay ( showHighScoresScreen model, Cmd.none )
+
+        ( GotHighScoresScreenMsg subMsg, _ ) ->
+            stay <| handleHighScoresScreenMsg subMsg model
 
 
 withAnimatedBoard : AnimatedBoard -> Model -> Model
@@ -195,30 +202,55 @@ withAnimatedBoard animatedBoard (Model modelData) =
 
 showSettingsScreen : Model -> Model
 showSettingsScreen (Model ({ settings } as modelData)) =
-    Model { modelData | settingsScreen = Just <| SettingsScreen.init settings }
+    Model { modelData | modal = SettingsModal <| SettingsScreen.init settings }
 
 
-handleSettingsScreenMsg : SettingsScreen.Msg -> Model -> ( Model, Cmd Msg, UpdateResult )
-handleSettingsScreenMsg settingsMsg ((Model modelData) as model) =
-    case modelData.settingsScreen of
-        Just settingsScreen ->
+handleSettingsScreenMsg : SettingsScreen.Msg -> Model -> ( Model, Cmd Msg )
+handleSettingsScreenMsg msg ((Model modelData) as model) =
+    case modelData.modal of
+        SettingsModal settingsScreen ->
             let
                 ( settingsModel, settingsCmd, settingsUpdateResult ) =
-                    SettingsScreen.update settingsMsg settingsScreen
+                    SettingsScreen.update msg settingsScreen
 
                 nextModelData =
                     case settingsUpdateResult of
                         SettingsScreen.KeepOpen ->
-                            { modelData | settingsScreen = Just settingsModel }
+                            { modelData | modal = SettingsModal settingsModel }
 
                         SettingsScreen.Close maybeNewSettings ->
                             -- Close settings screen, possibly updating the settings
-                            { modelData | settings = maybeNewSettings |> Maybe.withDefault modelData.settings, settingsScreen = Nothing }
+                            { modelData | settings = maybeNewSettings |> Maybe.withDefault modelData.settings, modal = NoModal }
             in
-            ( Model nextModelData, Cmd.map GotSettingsScreenMsg settingsCmd, Stay )
+            ( Model nextModelData, Cmd.map GotSettingsScreenMsg settingsCmd )
 
-        Nothing ->
-            ( model, Cmd.none, Stay )
+        _ ->
+            ( model, Cmd.none )
+
+
+showHighScoresScreen : Model -> Model
+showHighScoresScreen (Model ({ highScores } as modelData)) =
+    Model { modelData | modal = HighScoresModal <| HighScores.initHighScoresDialog highScores }
+
+
+handleHighScoresScreenMsg : HighScores.HighScoresMsg -> Model -> ( Model, Cmd Msg )
+handleHighScoresScreenMsg msg ((Model modelData) as model) =
+    case modelData.modal of
+        HighScoresModal highScoresModel ->
+            case HighScores.updateHighScoresDialog msg highScoresModel of
+                HighScores.KeepOpen_ nextHighScoresModel ->
+                    ( Model { modelData | modal = HighScoresModal nextHighScoresModel }, Cmd.none )
+
+                HighScores.Close_ (Just ( newHighScores, subCmd )) ->
+                    ( Model { modelData | modal = NoModal, highScores = newHighScores }
+                    , Cmd.map GotHighScoresScreenMsg subCmd
+                    )
+
+                HighScores.Close_ Nothing ->
+                    ( Model { modelData | modal = NoModal }, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 {-| Gets the initial state of the `DroppingLetters` state of the screen. Gets all the letters ready to drop, along with
@@ -404,7 +436,7 @@ rotateXTimes turns shape =
 
 
 view : Model -> Element Msg
-view (Model { animatedBoard, settings, settingsScreen }) =
+view (Model { animatedBoard, settings, modal }) =
     let
         ( letters_, maybeAnimation, droppingShapes_ ) =
             case animatedBoard of
@@ -429,36 +461,43 @@ view (Model { animatedBoard, settings, settingsScreen }) =
                 |> BoardView.withOpacity 0.5
 
         modalAttr =
-            case settingsScreen of
-                Just settingsScreenModel ->
+            case modal of
+                SettingsModal settingsScreenModel ->
                     [ SettingsScreen.view settingsScreenModel
                         |> Element.map GotSettingsScreenMsg
                         |> Element.inFront
                     ]
 
-                Nothing ->
+                HighScoresModal highScoresModel ->
+                    [ HighScores.highScoresView highScoresModel
+                        |> Element.map GotHighScoresScreenMsg
+                        |> Element.inFront
+                    ]
+
+                NoModal ->
                     []
     in
     Element.column
         ([ Element.spacingXY 0 25, Element.height Element.fill, Element.width Element.fill ] ++ modalAttr)
         [ Element.el [ Element.centerX ] <| BoardView.view boardViewConfig False (droppingShapeBlocks ++ letterBlocks) [] maybeAnimation
         , Element.row [ Element.centerX, Element.spacingXY 20 0 ]
-            [ button settingsScreen "Start Game" StartGameRequested
-            , button settingsScreen "Settings" ShowSettingsRequested
+            [ button modal "Start Game" StartGameRequested
+            , button modal "Settings" ShowSettingsRequested
+            , button modal "High Scores" ShowHighScoresRequested
             ]
         ]
 
 
-button : Maybe SettingsScreen.Model -> String -> msg -> Element msg
-button settingsScreen caption onPress =
+button : ModalDialog -> String -> msg -> Element msg
+button modal caption onPress =
     let
         buttonState =
-            case settingsScreen of
-                Just _ ->
-                    Button.Inaccessible
-
-                Nothing ->
+            case modal of
+                NoModal ->
                     Button.Enabled onPress
+
+                _ ->
+                    Button.Inaccessible
     in
     Button.button { style = Button.MainScreen, caption = caption, state = buttonState }
 
@@ -504,7 +543,7 @@ droppingShapeToBoardBlocks droppingShape =
 
 
 
--- SETTINGS
+-- MODEL INFO
 
 
 getSettings : Model -> Settings
@@ -512,21 +551,30 @@ getSettings (Model { settings }) =
     settings
 
 
+getHighScores : Model -> HighScores
+getHighScores (Model { highScores }) =
+    highScores
+
+
 
 -- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
-subscriptions (Model { animatedBoard, settingsScreen }) =
-    Sub.batch [ animationSubscriptions animatedBoard, settingsScreenSubscription settingsScreen ]
+subscriptions (Model { animatedBoard, modal }) =
+    let
+        modalSubscription =
+            case modal of
+                NoModal ->
+                    Sub.none
 
+                SettingsModal settingsModel ->
+                    settingsModel |> SettingsScreen.subscriptions |> Sub.map GotSettingsScreenMsg
 
-settingsScreenSubscription : Maybe SettingsScreen.Model -> Sub Msg
-settingsScreenSubscription maybeSettingScreen =
-    maybeSettingScreen
-        |> Maybe.map SettingsScreen.subscriptions
-        |> Maybe.withDefault Sub.none
-        |> Sub.map GotSettingsScreenMsg
+                HighScoresModal highScoresModel ->
+                    highScoresModel |> HighScores.highScoresDialogSubscriptions |> Sub.map GotHighScoresScreenMsg
+    in
+    Sub.batch [ animationSubscriptions animatedBoard, modalSubscription ]
 
 
 animationSubscriptions : AnimatedBoard -> Sub Msg

@@ -45,19 +45,19 @@ type alias Flags =
 
 init : Flags -> ( Model, Cmd Msg )
 init { settings, highScores } =
-    initAtWelcomeScreen (HighScores.fromJson highScores) (Settings.fromJson settings) Cmd.none
+    initAtWelcomeScreen (Settings.fromJson settings) (HighScores.fromJson highScores) Cmd.none
 
 
 {-| Initialises the model at the welcome screen. Used when the site is first loaded, and at the end of a game (after the
 "Game Over" animation.
 -}
-initAtWelcomeScreen : HighScores -> Settings -> Cmd Msg -> ( Model, Cmd Msg )
-initAtWelcomeScreen highScores settings cmd =
+initAtWelcomeScreen : Settings -> HighScores -> Cmd Msg -> ( Model, Cmd Msg )
+initAtWelcomeScreen settings highScores cmd =
     let
         ( subModel, subCmd ) =
-            WelcomeScreen.init settings
+            WelcomeScreen.init settings highScores
     in
-    ( Welcome { model = subModel, highScores = highScores }
+    ( Welcome { model = subModel }
     , Cmd.batch [ cmd, Cmd.map GotWelcomeScreenMsg subCmd ]
     )
 
@@ -73,7 +73,7 @@ that don't need that data). For variants whose associated model _does_ need acce
 (e.g. `WelcomeScreen.Model`) stores it, and we then don't store it as a separate field.
 -}
 type Model
-    = Welcome { model : WelcomeScreen.Model, highScores : HighScores } -- No game being played - showing the user some welcome/introductory info.
+    = Welcome { model : WelcomeScreen.Model } -- No game being played - showing the user some welcome/introductory info.
     | Playing { model : UserGame.Model, highScores : HighScores } -- Game is currently being played
     | GameOver { model : GameOver.Model, settings : Settings } -- Game has ended
 
@@ -110,7 +110,7 @@ update msg model =
             ( model, Cmd.none )
 
 
-handleWelcomeScreenMsg : WelcomeScreen.Msg -> { model : WelcomeScreen.Model, highScores : HighScores } -> ( Model, Cmd Msg )
+handleWelcomeScreenMsg : WelcomeScreen.Msg -> { model : WelcomeScreen.Model } -> ( Model, Cmd Msg )
 handleWelcomeScreenMsg welcomeMsg welcome =
     let
         ( welcomeModel, welcomeCmd, welcomeUpdateResult ) =
@@ -126,7 +126,7 @@ handleWelcomeScreenMsg welcomeMsg welcome =
             WelcomeScreen.getSettings welcomeModel
                 |> UserGame.init
                 |> (\( gameModel, gameCmd ) ->
-                        ( Playing { model = gameModel, highScores = welcome.highScores }
+                        ( Playing { model = gameModel, highScores = WelcomeScreen.getHighScores welcomeModel }
                         , Cmd.map GotPlayingGameMsg gameCmd
                         )
                    )
@@ -153,7 +153,7 @@ handleGameOverMsg gameOverMsg gameOver =
             ( GameOver { gameOver | model = subModel }, Cmd.map GotGameOverMsg subCmd )
 
         GameOver.Done ( subModel, subCmd ) ->
-            initAtWelcomeScreen (GameOver.getHighScores subModel) gameOver.settings <| Cmd.map GotGameOverMsg subCmd
+            initAtWelcomeScreen gameOver.settings (GameOver.getHighScores subModel) <| Cmd.map GotGameOverMsg subCmd
 
 
 
