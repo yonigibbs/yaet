@@ -101,7 +101,12 @@ i.e. has no more than `maxItems` in it, and is sorted (descending by score).
 -}
 fromEntries : List Entry -> HighScores
 fromEntries entries =
-    entries |> List.take maxItems |> List.sortBy .score |> List.reverse |> HighScores
+    entries
+        |> List.take maxItems
+        |> List.map (\entry -> { entry | name = String.left maxNameLength entry.name })
+        |> List.sortBy .score
+        |> List.reverse
+        |> HighScores
 
 
 {-| The maximum number of items to retain in the high scores.
@@ -109,6 +114,13 @@ fromEntries entries =
 maxItems : Int
 maxItems =
     5
+
+
+{-| The maximum number of characters allowed in a name in the high scores.
+-}
+maxNameLength : Int
+maxNameLength =
+    8
 
 
 
@@ -139,7 +151,7 @@ highScoreRow : Int -> Element msg -> Element msg -> Element msg
 highScoreRow index nameElement scoreElement =
     Element.row [ Element.width Element.fill, Element.spacing 5, Element.height <| Element.px 25 ]
         [ index + 1 |> String.fromInt |> Element.text |> Element.el [ Element.alignLeft, Element.width <| Element.px 15 ]
-        , Element.el [ Element.alignLeft, Element.width <| Element.px 150, Element.clip ] nameElement
+        , Element.el [ Element.alignLeft, Element.width <| Element.px 150 ] nameElement
         , Element.el [ Element.alignRight ] scoreElement
         ]
 
@@ -421,7 +433,7 @@ setName newName (NewHighScoreModel data) =
 
 withName : String -> Entry -> Entry
 withName name entry =
-    { entry | name = String.left 10 <| name }
+    { entry | name = String.left maxNameLength <| name }
 
 
 {-| The view for when a new high score is being added.
