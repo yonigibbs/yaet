@@ -21,6 +21,7 @@ import Process
 import Random
 import Scoring
 import Settings exposing (Settings)
+import SettingsScreen
 import Shape exposing (Shape)
 import Task
 import Time
@@ -484,28 +485,91 @@ handleAnimationMsg model msg =
 view : Model -> Element msg
 view model =
     let
-        screenSection content =
-            Element.el [ Element.width Element.shrink, Element.alignTop, Element.paddingXY 20 0 ] content
+        screenSection width content =
+            Element.el [ Element.alignTop, Element.centerX, Element.width width ] content
 
-        { normalBlocks, previewLandingBlocks, highlightAnimation, showPauseOverlay } =
+        { normalBlocks, previewLandingBlocks, highlightAnimation, showPauseOverlay, settings } =
             case model of
-                Initialising _ ->
-                    { normalBlocks = [], previewLandingBlocks = [], highlightAnimation = Nothing, showPauseOverlay = False }
+                Initialising settings_ ->
+                    { normalBlocks = []
+                    , previewLandingBlocks = []
+                    , highlightAnimation = Nothing
+                    , showPauseOverlay = False
+                    , settings = settings_
+                    }
 
                 Playing playingModel ->
                     { normalBlocks = BoardView.withOpacity 1 playingModel.normalBlocks
                     , previewLandingBlocks = playingModel.previewLandingBlocks
                     , highlightAnimation = playingModel.highlightAnimation
                     , showPauseOverlay = Game.isPaused playingModel.game
+                    , settings = playingModel.settings
                     }
     in
-    Element.row [] <|
-        [ screenSection <| Element.column [ Element.spacingXY 0 50 ] [ holdShapeView model, scoringView model ]
-        , screenSection <|
-            Element.el [ Element.centerX ] <|
-                BoardView.view boardViewConfig showPauseOverlay normalBlocks previewLandingBlocks highlightAnimation
-        , screenSection <| upcomingShapeView model
+    Element.row
+        [ Element.Font.color <| Element.rgb255 100 100 100
+        , Element.width Element.fill
+        , Element.height Element.fill
+        , Element.centerX
+        , Element.spacingXY 30 0
         ]
+    <|
+        [ screenSection (Element.px 200) <| Element.column [ Element.spacingXY 0 50 ] [ holdShapeView model, scoringView model ]
+        , screenSection Element.shrink <|
+            BoardView.view boardViewConfig showPauseOverlay normalBlocks previewLandingBlocks highlightAnimation
+        , screenSection (Element.px 200) <|
+            Element.column [ Element.spacingXY 0 50 ]
+                [ upcomingShapeView model
+                , keyBindingsView (isGamePaused model) settings
+                ]
+        ]
+
+
+keyBindingsView : Bool -> Settings -> Element msg
+keyBindingsView isPaused settings =
+    let
+        keyBindings =
+            Settings.allKeyBindings settings
+
+        pauseOverlay =
+            if isPaused then
+                [ pauseMaskAttr [] ]
+
+            else
+                []
+    in
+    Element.column
+        ([ Element.spacing 5
+         , Element.centerX
+         , Element.padding 10
+         , Element.Background.color <| Element.rgb255 0 0 0
+         , Element.width Element.fill
+         , Element.Border.width 2
+         , Element.Border.rounded 5
+         ]
+            ++ pauseOverlay
+        )
+        [ Element.el [ Element.Font.bold, Element.centerX, Element.Font.size 16 ] <| Element.text "Keys"
+        , Element.el [] <| keyBindingsTable keyBindings
+        ]
+
+
+keyBindingsTable : List ( Game.UserAction, String ) -> Element msg
+keyBindingsTable keyBindings =
+    Element.table [ Element.spacingXY 10 5, Element.Font.size 12 ]
+        { data = keyBindings
+        , columns =
+            [ { -- Don't use Element.none as table header because of this issue: https://github.com/mdgriffith/elm-ui/issues/161
+                header = Element.text ""
+              , width = Element.shrink
+              , view = Tuple.first >> Game.userActionDescription >> Element.text
+              }
+            , { header = Element.text ""
+              , width = Element.shrink
+              , view = Tuple.second >> SettingsScreen.keyDescription >> Element.text
+              }
+            ]
+        }
 
 
 {-| Gets a view showing the upcoming shape in the game.
@@ -562,7 +626,7 @@ shapePreview isPaused caption maybeShape =
             }
     in
     BoardView.view boardViewConfig_ False blocks [] Nothing
-        |> Element.el [ Element.centerX, Element.centerY, Element.centerX ]
+        |> Element.el [ Element.centerX, Element.centerY ]
         |> sidePanelSection isPaused caption
 
 
@@ -595,6 +659,20 @@ scoringView model =
         |> sidePanelSection (isGamePaused model) "Score"
 
 
+pauseMaskAttr : List (Element.Attribute msg) -> Element.Attribute msg
+pauseMaskAttr customerAttrs =
+    Element.inFront <|
+        Element.el
+            ([ Element.Background.color <| Element.rgb255 50 50 50
+             , Element.width Element.fill
+             , Element.height Element.fill
+             , Element.alpha 0.6
+             ]
+                ++ customerAttrs
+            )
+            Element.none
+
+
 {-| Gets a section to show to the left or right of the game, namely a rectangle showing the supplied contents (e.g. the
 next dropping shape), styled in a consistent way.
 -}
@@ -603,16 +681,7 @@ sidePanelSection isPaused caption contents =
     let
         pauseOverlay =
             if isPaused then
-                [ Element.inFront <|
-                    Element.el
-                        [ Element.Background.color <| Element.rgb255 50 50 50
-                        , Element.width Element.fill
-                        , Element.height Element.fill
-                        , Element.Border.rounded 20
-                        , Element.alpha 0.6
-                        ]
-                        Element.none
-                ]
+                [ pauseMaskAttr [ Element.Border.rounded 20 ] ]
 
             else
                 []
@@ -624,16 +693,13 @@ sidePanelSection isPaused caption contents =
          , Element.Background.color <| Element.rgb255 0 0 0
          , Element.height <| Element.px 140
          , Element.width <| Element.px 180
-         , Element.Border.color <| Element.rgb255 100 100 100
          , Element.Border.width 2
          , Element.Border.rounded 20
          , Element.Border.glow (Element.rgb255 200 200 200) 0.2
-         , Element.Font.color <| Element.rgb255 100 100 100
          ]
             ++ pauseOverlay
         )
-        [ Element.el [ Element.Font.bold, Element.centerX ] <|
-            Element.text caption
+        [ Element.el [ Element.Font.bold, Element.centerX ] <| Element.text caption
         , contents
         ]
 

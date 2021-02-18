@@ -210,7 +210,13 @@ view model =
 
 wrapBoardView : Element msg -> Element msg
 wrapBoardView boardView =
-    Element.el [ Element.centerX, Element.paddingEach { edges | top = 25 } ] boardView
+    Element.el
+        [ Element.centerX
+        , Element.paddingEach { edges | top = 25 }
+        , Element.height Element.fill
+        , Element.width Element.fill
+        ]
+        boardView
 
 
 subscriptions : Model -> Sub Msg

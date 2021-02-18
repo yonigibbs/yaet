@@ -1,4 +1,4 @@
-module SettingsScreen exposing (Model, Msg, UpdateResult(..), init, subscriptions, update, view)
+module SettingsScreen exposing (Model, Msg, UpdateResult(..), init, keyDescription, subscriptions, update, view)
 
 {-| Contains all functionality related to the Settings screen. Both the screen that shows the settings, and the screen
 launched from it, which the user uses to assign a key binding.
@@ -142,7 +142,7 @@ update msg ((Model ({ editableSettings, screen, settingsToPersist } as modelData
             ( Model { modelData | screen = SettingsScreen }, Cmd.none, KeepOpen )
 
         ( KeySelectionScreenRequested action, SettingsScreen ) ->
-            ( Model { modelData | screen = KeySelectionScreen { action = action, key = Settings.keyBinding action editableSettings } }
+            ( Model { modelData | screen = KeySelectionScreen { action = action, key = Settings.editableKeyBinding action editableSettings } }
             , Cmd.none
             , KeepOpen
             )
@@ -229,7 +229,7 @@ keyBindingsTable : EditableSettings -> Element Msg
 keyBindingsTable settings =
     let
         keyBindings =
-            Settings.allKeyBindings settings
+            Settings.allEditableKeyBindings settings
 
         column caption contents =
             { header = Element.el [ Element.Font.size 16, Element.Font.bold, Element.paddingXY 0 4 ] <| Element.text caption

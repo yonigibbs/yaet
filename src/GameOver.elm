@@ -197,7 +197,7 @@ view (Model modelData) =
                 HandlingNewHighScore newHighScoreModel ->
                     ( HighScores.newHighScoreView newHighScoreModel |> Element.map GotNewHighScoreDialogMsg, 1.0 )
     in
-    Element.el [ Element.inFront overlay, Element.alpha opacity ] boardView
+    Element.el [ Element.inFront overlay, Element.alpha opacity, Element.centerX ] boardView
 
 
 {-| The "Game Over" message overlaid on top of the game board.

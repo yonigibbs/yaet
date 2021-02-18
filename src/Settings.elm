@@ -1,11 +1,12 @@
 module Settings exposing
     ( EditableSettings
     , Settings
+    , allEditableKeyBindings
     , allKeyBindings
     , default
+    , editableKeyBinding
     , fromEditable
     , fromJson
-    , keyBinding
     , keyboardDecoder
     , toEditable
     , toJson
@@ -36,6 +37,18 @@ however, we swap these about: the JSON field name is the action (e.g. "moveLeft"
 -}
 type Settings
     = Settings { keyBindings : Dict String Game.UserAction }
+
+
+{-| Gets a list of the the actions (in the order they're shown to the user, e.g. on the Settings screen), along with the
+key bound to each one.
+-}
+allKeyBindings : Settings -> List ( Game.UserAction, String )
+allKeyBindings settings =
+    let
+        (EditableSettings { keyBindings }) =
+            toEditable settings
+    in
+    allActionsOrdered |> List.map (\action -> ( action, keyBindings |> AssocList.get action |> Maybe.withDefault "" ))
 
 
 
@@ -292,16 +305,16 @@ fromEditable (EditableSettings { keyBindings }) =
 
 {-| Gets a list of all the current bindings in the supplied `EditableSettings`.
 -}
-allKeyBindings : EditableSettings -> List { action : Game.UserAction, key : Maybe String }
-allKeyBindings (EditableSettings { keyBindings }) =
+allEditableKeyBindings : EditableSettings -> List { action : Game.UserAction, key : Maybe String }
+allEditableKeyBindings (EditableSettings { keyBindings }) =
     allActionsOrdered
         |> List.map (\action -> { action = action, key = AssocList.get action keyBindings })
 
 
 {-| Gets the current bindings in the supplied `EditableSettings` for the given `action`.
 -}
-keyBinding : Game.UserAction -> EditableSettings -> Maybe String
-keyBinding action (EditableSettings { keyBindings }) =
+editableKeyBinding : Game.UserAction -> EditableSettings -> Maybe String
+editableKeyBinding action (EditableSettings { keyBindings }) =
     AssocList.get action keyBindings
 
 
