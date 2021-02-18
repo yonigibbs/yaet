@@ -47,7 +47,7 @@ type alias Config msg =
     { closeButton : CloseButton msg, submitButton : SubmitButton msg, customButtons : List (CustomButton msg) }
 
 
-{-| The default configuration for modal dialogs. Defines that they should hvae a Cancel button with the given message,
+{-| The default configuration for modal dialogs. Defines that they should have a Cancel button with the given message,
 and a Save button with the given message (which might be Nothing if the button is currently disabled). Has no custom
 buttons. This can be used as a starting point for a config which can then be amended using some of the builder functions
 such as `withCustomButton`.

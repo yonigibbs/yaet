@@ -17,3 +17,8 @@ const app = Elm.Main.init({
  * Persists the settings in local storage.
  */
 app.ports.persistSettings.subscribe(settings => localStorage.setItem("settings", JSON.stringify(settings)))
+
+/**
+ * Persists the high scores in local storage.
+ */
+app.ports.persistHighScores.subscribe(highScores => localStorage.setItem("highScores", JSON.stringify(highScores)))

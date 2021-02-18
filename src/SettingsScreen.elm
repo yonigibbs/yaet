@@ -77,6 +77,10 @@ type UpdateResult
     | Close (Maybe Settings)
 
 
+
+-- TODO: should UpdateResult contain the model and cmd returned from update? (Like for high scores.)
+
+
 {-| Updates the model based on the supplied message, and returns a new model and command, along with an `UpdateResult`
 value (see that type for more info).
 -}

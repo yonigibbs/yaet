@@ -45,20 +45,20 @@ type alias Flags =
 
 init : Flags -> ( Model, Cmd Msg )
 init { settings, highScores } =
-    initAtWelcomeScreen (HighScores.fromJson highScores) (Settings.fromJson settings)
+    initAtWelcomeScreen (Settings.fromJson settings) (HighScores.fromJson highScores) Cmd.none
 
 
-{-| Initialiases the model at the welcome screen. Used when the site is first loaded, and at the end of a game (after the
+{-| Initialises the model at the welcome screen. Used when the site is first loaded, and at the end of a game (after the
 "Game Over" animation.
 -}
-initAtWelcomeScreen : HighScores -> Settings -> ( Model, Cmd Msg )
-initAtWelcomeScreen highScores settings =
+initAtWelcomeScreen : Settings -> HighScores -> Cmd Msg -> ( Model, Cmd Msg )
+initAtWelcomeScreen settings highScores cmd =
     let
         ( subModel, subCmd ) =
-            WelcomeScreen.init settings
+            WelcomeScreen.init settings highScores
     in
-    ( Welcome { model = subModel, highScores = highScores }
-    , Cmd.map GotWelcomeScreenMsg subCmd
+    ( Welcome { model = subModel }
+    , Cmd.batch [ cmd, Cmd.map GotWelcomeScreenMsg subCmd ]
     )
 
 
@@ -73,7 +73,7 @@ that don't need that data). For variants whose associated model _does_ need acce
 (e.g. `WelcomeScreen.Model`) stores it, and we then don't store it as a separate field.
 -}
 type Model
-    = Welcome { model : WelcomeScreen.Model, highScores : HighScores } -- No game being played - showing the user some welcome/introductory info.
+    = Welcome { model : WelcomeScreen.Model } -- No game being played - showing the user some welcome/introductory info.
     | Playing { model : UserGame.Model, highScores : HighScores } -- Game is currently being played
     | GameOver { model : GameOver.Model, settings : Settings } -- Game has ended
 
@@ -110,7 +110,7 @@ update msg model =
             ( model, Cmd.none )
 
 
-handleWelcomeScreenMsg : WelcomeScreen.Msg -> { model : WelcomeScreen.Model, highScores : HighScores } -> ( Model, Cmd Msg )
+handleWelcomeScreenMsg : WelcomeScreen.Msg -> { model : WelcomeScreen.Model } -> ( Model, Cmd Msg )
 handleWelcomeScreenMsg welcomeMsg welcome =
     let
         ( welcomeModel, welcomeCmd, welcomeUpdateResult ) =
@@ -126,7 +126,7 @@ handleWelcomeScreenMsg welcomeMsg welcome =
             WelcomeScreen.getSettings welcomeModel
                 |> UserGame.init
                 |> (\( gameModel, gameCmd ) ->
-                        ( Playing { model = gameModel, highScores = welcome.highScores }
+                        ( Playing { model = gameModel, highScores = WelcomeScreen.getHighScores welcomeModel }
                         , Cmd.map GotPlayingGameMsg gameCmd
                         )
                    )
@@ -149,11 +149,11 @@ handlePlayingGameMsg gameMsg playing =
 handleGameOverMsg : GameOver.Msg -> { model : GameOver.Model, settings : Settings } -> ( Model, Cmd Msg )
 handleGameOverMsg gameOverMsg gameOver =
     case GameOver.update gameOverMsg gameOver.model of
-        GameOver.Continue subModel ->
-            ( GameOver { gameOver | model = subModel }, Cmd.none )
+        GameOver.Continue ( subModel, subCmd ) ->
+            ( GameOver { gameOver | model = subModel }, Cmd.map GotGameOverMsg subCmd )
 
-        GameOver.Done ->
-            initAtWelcomeScreen (GameOver.getHighScores gameOver.model) gameOver.settings
+        GameOver.Done ( subModel, subCmd ) ->
+            initAtWelcomeScreen gameOver.settings (GameOver.getHighScores subModel) <| Cmd.map GotGameOverMsg subCmd
 
 
 
@@ -176,7 +176,7 @@ view model =
                     -- TODO: the below assumes there are no highlighted blocks when the game ends, but the type system doesn't
                     -- currently guarantee that (Game.handleDroppingShapeLanded can result in GameOver even when its state is
                     -- RowRemovalGameState, even though it's not currently ever called like that). Revisit maybe.
-                    GameOver.view gameOver.model |> wrapBoardView
+                    GameOver.view gameOver.model |> Element.map GotGameOverMsg |> wrapBoardView
     in
     Element.layoutWith
         { options =
@@ -215,5 +215,5 @@ subscriptions model =
         Playing playing ->
             UserGame.subscriptions playing.model |> Sub.map GotPlayingGameMsg
 
-        GameOver _ ->
-            GameOver.subscriptions |> Sub.map GotGameOverMsg
+        GameOver gameOver ->
+            GameOver.subscriptions gameOver.model |> Sub.map GotGameOverMsg

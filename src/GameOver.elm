@@ -2,6 +2,9 @@ module GameOver exposing (Model, Msg, UpdateResult(..), getHighScores, init, sub
 
 {-| This module handles all functionality related to when a game is over. Shows the board as it was when the game ended,
 animating a "Game Over" message on top of it, then fading the game out.
+
+Also responsible for asking the user to fill in their high scores, if a new high score was achieved.
+
 -}
 
 import BoardView
@@ -13,6 +16,7 @@ import Element.Border
 import Element.Font
 import Game exposing (Game)
 import HighScores exposing (HighScores)
+import Scoring
 import Shape
 import UIHelpers
 import UserGame
@@ -36,10 +40,22 @@ type Animation
     | FadingOut AnimationModel
 
 
+{-| The state that the screen is currently at:
+
+  - `Animating`: The "Game Over" animation is in progress.
+  - `HandlingNewHighScore`: The user achieved a new high score and is being prompted for a name to store against when
+    saving the high scores.
+
+-}
+type ScreenState
+    = Animating Animation
+    | HandlingNewHighScore HighScores.NewHighScoreModel
+
+
 {-| The data associated with the model (which is an opaque type).
 -}
 type alias ModelData =
-    { blocks : List ( Coord, Shape.BlockColour ), animation : Animation, highScores : HighScores }
+    { blocks : List ( Coord, Shape.BlockColour ), state : ScreenState, score : Int, highScores : HighScores }
 
 
 type Model
@@ -50,7 +66,8 @@ init : HighScores -> Game shapeBuffer -> Model
 init highScores game =
     Model
         { blocks = (Game.blocks game).normal
-        , animation = EnteringGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 }
+        , state = Animating <| EnteringGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 }
+        , score = game |> Game.getScoring |> Scoring.getPoints
         , highScores = highScores
         }
 
@@ -61,48 +78,92 @@ init highScores game =
 
 type Msg
     = AnimationFrame Float
+    | GotNewHighScoreDialogMsg HighScores.NewHighScoreMsg
 
 
-{-| The value returned from the `update` function. Either `Continue`, meaning the game over animation is still in action,
-or `Done`, meaning it's finished and the calling module should now return the user to the welcome screen.
+{-| The value returned from the `update` function. Either `Continue`, meaning the game over animation is still in action
+(or the user is entering the name for a new high score), or `Done`, meaning it's finished and the calling module should
+now return the user to the welcome screen.
 -}
 type UpdateResult
-    = Continue Model
-    | Done
+    = Continue ( Model, Cmd Msg )
+    | Done ( Model, Cmd Msg )
 
 
 {-| Updates this module's model based on the supplied message. Returns an `UpdateResult` which informs the calling module
 of how to proceed (see `UpdateResult` for more info).
 -}
 update : Msg -> Model -> UpdateResult
-update (AnimationFrame timeSinceLastFrameMs) (Model model) =
-    case model.animation of
-        EnteringGameOverMessage animationModel ->
+update msg ((Model modelData) as model) =
+    let
+        ignore =
+            Continue ( model, Cmd.none )
+    in
+    case ( msg, modelData.state ) of
+        ( AnimationFrame timeSinceLastFrameMs, Animating (EnteringGameOverMessage animationModel) ) ->
             progressAnimation model
                 timeSinceLastFrameMs
                 animationModel
                 EnteringGameOverMessage
-                (Just <| ShowingGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 })
+                (Just ( Animating <| ShowingGameOverMessage { totalTimeMs = 1000, elapsedTimeMs = 0 }, Cmd.none ))
 
-        ShowingGameOverMessage animationModel ->
-            progressAnimation model
-                timeSinceLastFrameMs
-                animationModel
-                ShowingGameOverMessage
-                (Just <| FadingOut { totalTimeMs = 500, elapsedTimeMs = 0 })
+        ( AnimationFrame timeSinceLastFrameMs, Animating (ShowingGameOverMessage animationModel) ) ->
+            let
+                ifAnimationOver =
+                    case HighScores.initNewHighScoreDialog modelData.score modelData.highScores of
+                        Just ( subModel, subCmd ) ->
+                            -- The user achieved a new high score - show the New High Score dialog.
+                            Just ( HandlingNewHighScore subModel, Cmd.map GotNewHighScoreDialogMsg subCmd )
 
-        FadingOut animationModel ->
+                        Nothing ->
+                            -- Score wasn't high enough to be a new high score - when animation ends just fade out then
+                            -- return to Welcome screen
+                            Just ( Animating <| FadingOut { totalTimeMs = 500, elapsedTimeMs = 0 }, Cmd.none )
+            in
+            progressAnimation model timeSinceLastFrameMs animationModel ShowingGameOverMessage ifAnimationOver
+
+        ( AnimationFrame timeSinceLastFrameMs, Animating (FadingOut animationModel) ) ->
             progressAnimation model timeSinceLastFrameMs animationModel FadingOut Nothing
+
+        ( AnimationFrame _, HandlingNewHighScore _ ) ->
+            ignore
+
+        ( GotNewHighScoreDialogMsg subMsg, _ ) ->
+            handleNewHighScoreDialogMsg subMsg model
+
+
+{-| Handles a message from the New High Score dialog. Delegates its handling to that module, and responds to the result
+of that `update...` call accordingly (e.g. by closing that dialog if finished).
+-}
+handleNewHighScoreDialogMsg : HighScores.NewHighScoreMsg -> Model -> UpdateResult
+handleNewHighScoreDialogMsg msg ((Model modelData) as model) =
+    case modelData.state of
+        Animating _ ->
+            Continue ( model, Cmd.none )
+
+        HandlingNewHighScore newHighScoreModel ->
+            case HighScores.updateNewHighScoreDialog msg newHighScoreModel of
+                HighScores.KeepOpen nextNewHighScoreModel ->
+                    Continue <| ( Model { modelData | state = HandlingNewHighScore nextNewHighScoreModel }, Cmd.none )
+
+                HighScores.Close (Just ( newHighScores, subCmd )) ->
+                    Done
+                        ( Model { modelData | highScores = newHighScores }
+                        , Cmd.map GotNewHighScoreDialogMsg subCmd
+                        )
+
+                HighScores.Close Nothing ->
+                    Done ( model, Cmd.none )
 
 
 {-| Progresses the animation after an animation frame. Each animation knows the total time it should run for so this will
 either continue the current animation if not enough time has elapsed yet (using `ifAnimationContinuing`) or will use
 `ifAnimationOver` to decide how to proceed. If that parameter is a `Nothing` then `Done` is returned, meaning this
 whole module is now finished and the user should be returned to the Welcome screen. Otherwise (i.e. if `ifAnimationOver`
-is `Just` some `Animation`, then that `Animation` is used (i.e. the next stage in the overall animation proceeds).
+is `Just` some `ScreenState`) then that `ScreenState` is used (e.g. the next stage in the overall animation might proceed).
 -}
-progressAnimation : ModelData -> Float -> AnimationModel -> (AnimationModel -> Animation) -> Maybe Animation -> UpdateResult
-progressAnimation modelData timeSinceLastFrameMs animationModel ifAnimationContinuing ifAnimationOver =
+progressAnimation : Model -> Float -> AnimationModel -> (AnimationModel -> Animation) -> Maybe ( ScreenState, Cmd Msg ) -> UpdateResult
+progressAnimation ((Model modelData) as model) timeSinceLastFrameMs animationModel ifAnimationContinuing ifAnimationOver =
     let
         newElapsedTimeMs =
             animationModel.elapsedTimeMs + timeSinceLastFrameMs
@@ -110,50 +171,64 @@ progressAnimation modelData timeSinceLastFrameMs animationModel ifAnimationConti
     if newElapsedTimeMs < animationModel.totalTimeMs then
         { animationModel | elapsedTimeMs = newElapsedTimeMs }
             |> ifAnimationContinuing
-            |> (\continuingAnimation -> Model { modelData | animation = continuingAnimation })
-            |> Continue
+            |> (\continuingAnimation -> Continue ( Model { modelData | state = Animating continuingAnimation }, Cmd.none ))
 
     else
         ifAnimationOver
-            |> Maybe.map (\nextAnimation -> Continue <| Model { modelData | animation = nextAnimation })
-            |> Maybe.withDefault Done
+            |> Maybe.map (\( nextState, nextCmd ) -> Continue ( Model { modelData | state = nextState }, nextCmd ))
+            |> Maybe.withDefault (Done ( model, Cmd.none ))
 
 
 
 -- VIEW
 
 
-view : Model -> Element msg
+view : Model -> Element Msg
 view (Model modelData) =
     let
-        { messageOpacity, messageGlow, entireOpacity } =
-            calcViewInfo modelData
-
         boardView =
             BoardView.view UserGame.boardViewConfig False (modelData.blocks |> BoardView.withOpacity 1) [] Nothing
 
-        gameOverOverlay =
-            Element.row
-                [ Element.Border.width 2
-                , Element.centerX
-                , Element.centerY
-                , Element.Background.color UIHelpers.mainForegroundColour
-                , Element.padding 20
-                , Element.Border.rounded 20
-                , Element.Border.glow (Element.rgb255 200 200 200) messageGlow
-                , Element.Font.size 32
-                , Element.Font.extraBold
-                , Element.Font.color UIHelpers.mainBackgroundColour
-                , Element.Font.family [ Element.Font.typeface "Courier New" ]
-                , Element.alpha messageOpacity
-                ]
-                [ Element.text "Game Over" ]
+        ( overlay, opacity ) =
+            case modelData.state of
+                Animating animation ->
+                    gameOverOverlay animation
+
+                HandlingNewHighScore newHighScoreModel ->
+                    ( HighScores.newHighScoreView newHighScoreModel |> Element.map GotNewHighScoreDialogMsg, 1.0 )
     in
-    Element.el [ Element.inFront gameOverOverlay, Element.alpha entireOpacity ] boardView
+    Element.el [ Element.inFront overlay, Element.alpha opacity ] boardView
 
 
-calcViewInfo : ModelData -> { messageOpacity : Float, messageGlow : Float, entireOpacity : Float }
-calcViewInfo { animation } =
+{-| The "Game Over" message overlaid on top of the game board.
+-}
+gameOverOverlay : Animation -> ( Element msg, Float )
+gameOverOverlay animation =
+    let
+        { messageOpacity, messageGlow, entireOpacity } =
+            calcGameOverMsgViewInfo animation
+    in
+    ( Element.row
+        [ Element.centerX
+        , Element.centerY
+        , Element.Border.width 2
+        , Element.Background.color UIHelpers.mainForegroundColour
+        , Element.padding 20
+        , Element.Border.rounded 20
+        , Element.Border.glow (Element.rgb255 200 200 200) messageGlow
+        , Element.Font.size 32
+        , Element.Font.extraBold
+        , Element.Font.color UIHelpers.mainBackgroundColour
+        , Element.Font.family [ Element.Font.typeface "Courier New" ]
+        , Element.alpha messageOpacity
+        ]
+        [ Element.text "Game Over" ]
+    , entireOpacity
+    )
+
+
+calcGameOverMsgViewInfo : Animation -> { messageOpacity : Float, messageGlow : Float, entireOpacity : Float }
+calcGameOverMsgViewInfo animation =
     let
         defaultMessageGlow =
             5
@@ -213,6 +288,11 @@ getHighScores (Model { highScores }) =
 -- SUBSCRIPTIONS
 
 
-subscriptions : Sub Msg
-subscriptions =
-    Browser.Events.onAnimationFrameDelta AnimationFrame
+subscriptions : Model -> Sub Msg
+subscriptions (Model { state }) =
+    case state of
+        Animating _ ->
+            Browser.Events.onAnimationFrameDelta AnimationFrame
+
+        HandlingNewHighScore newHighScoreModel ->
+            HighScores.newHighScoreDialogSubscriptions newHighScoreModel |> Sub.map GotNewHighScoreDialogMsg
