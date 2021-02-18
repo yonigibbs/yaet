@@ -216,7 +216,7 @@ fadeEdgesOverlay colourToFadeTo =
     in
     [ Svg.defs []
         [ Svg.radialGradient [ SvgA.id fadeOutOverlayId ]
-            [ Svg.stop [ SvgA.offset "35%", SvgA.stopOpacity <| SvgT.Opacity 0, SvgA.stopColor <| Color.toCssString colourToFadeTo ] []
+            [ Svg.stop [ SvgA.offset "50%", SvgA.stopOpacity <| SvgT.Opacity 0, SvgA.stopColor <| Color.toCssString colourToFadeTo ] []
             , Svg.stop [ SvgA.offset "100%", SvgA.stopOpacity <| SvgT.Opacity 100, SvgA.stopColor <| Color.toCssString colourToFadeTo ] []
             ]
         ]

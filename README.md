@@ -45,10 +45,9 @@ Current state: **WIP.**
     - [x] Let user close screen by pressing Escape key
 - [x] Update terminology in code - use soft/hard drop, and proper shape names, etc
 - [x] Scores
-- [ ] High scores (persisted to local storage)
-- [ ] Add link to get to source code, etc.
-- [ ] Make UI responsive.
-  - [ ] Buttons to use instead of keyboard for phones/tablets?
+- [x] High scores (persisted to local storage)
+- [x] Add link to get to source code, etc.
+- [ ] Buttons instead of keyboard (for phones/tablets)?
 - [ ] Prevent default on key presses? (Otherwise arrow keys can move viewport about if browser window small)
   - [ ] See https://github.com/elm/browser/issues/89 - might need to use ports?
 - [ ] Some moves currently not possible? Investigate T-spin triple, for example.

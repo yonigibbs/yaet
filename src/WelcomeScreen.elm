@@ -272,13 +272,13 @@ initDroppingLetters randomSeed =
             Array.get index randomColours |> Maybe.withDefault Shape.Blue
     in
     { landed = []
-    , dropping = { blocks = tBlocks, colour = getRandomColour 0, gridCoord = ( 25, boardViewConfig.rowCount ) }
+    , dropping = { blocks = tBlocks, colour = getRandomColour 0, gridCoord = ( 11, boardViewConfig.rowCount ) }
     , next =
-        [ { blocks = eBlocks, colour = getRandomColour 1, gridCoord = ( 31, boardViewConfig.rowCount ) }
-        , { blocks = tBlocks, colour = getRandomColour 2, gridCoord = ( 36, boardViewConfig.rowCount ) }
-        , { blocks = rBlocks, colour = getRandomColour 3, gridCoord = ( 42, boardViewConfig.rowCount ) }
-        , { blocks = iBlocks, colour = getRandomColour 4, gridCoord = ( 47, boardViewConfig.rowCount ) }
-        , { blocks = sBlocks, colour = getRandomColour 5, gridCoord = ( 49, boardViewConfig.rowCount ) }
+        [ { blocks = eBlocks, colour = getRandomColour 1, gridCoord = ( 17, boardViewConfig.rowCount ) }
+        , { blocks = tBlocks, colour = getRandomColour 2, gridCoord = ( 22, boardViewConfig.rowCount ) }
+        , { blocks = rBlocks, colour = getRandomColour 3, gridCoord = ( 28, boardViewConfig.rowCount ) }
+        , { blocks = iBlocks, colour = getRandomColour 4, gridCoord = ( 33, boardViewConfig.rowCount ) }
+        , { blocks = sBlocks, colour = getRandomColour 5, gridCoord = ( 35, boardViewConfig.rowCount ) }
         ]
     , randomSeed = randomSeed
     }
@@ -422,7 +422,7 @@ withNewRandomDroppingShape ({ randomSeed, shapeBuffer, droppingShapes } as data)
 randomShapeStartInfoGenerator : Random.Generator { xCoord : Int, turns : Int }
 randomShapeStartInfoGenerator =
     Random.map2 (\xCoord turns -> { xCoord = xCoord, turns = turns })
-        (Random.int 20 55)
+        (Random.int 5 45)
         (Random.int 0 3)
 
 
@@ -514,7 +514,7 @@ boardViewConfig : BoardView.Config
 boardViewConfig =
     { cellSize = 15
     , rowCount = 15
-    , colCount = 80
+    , colCount = 50
     , borderStyle = BoardView.Fade UIHelpers.mainBackgroundColour
     , showGridLines = True
     }

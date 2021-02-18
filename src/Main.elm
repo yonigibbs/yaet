@@ -197,6 +197,13 @@ view model =
         , Element.height Element.fill
         , Element.Background.color UIHelpers.mainBackgroundColour
         , Element.scrollbarY
+        , Element.inFront <|
+            Element.link [ Element.alignBottom, Element.alignRight, Element.padding 20 ]
+                { url = "https://github.com/yonigibbs/yaet"
+                , label =
+                    Element.image []
+                        { src = "./github.png", description = "Source code on GitHub" }
+                }
         ]
         contents
 
