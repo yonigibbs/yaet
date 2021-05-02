@@ -36,7 +36,7 @@ import Time
     a message every so often (e.g. 50ms): every time one of these messages fires, if the key is still being held down,
     we decrease the value in `delayTillRepeat`. Once it's at zero, we stop decreasing it, and instead start repeatedly
     executing the action. This means that when the user holds down a key the action is executed immediately, then there's
-    a short pause, before it starts being executed repeatedly.
+    a short pause, before it starts being executed repeatedly (i.e. it's debounced).
 
 -}
 type alias ActionRequest =
@@ -98,7 +98,33 @@ update ((Model modelData) as model) msg =
 
 addNewRequest : Game.UserAction -> Model -> Model
 addNewRequest action (Model modelData) =
-    Model { modelData | requests = { action = action, delayTillRepeat = 4 } :: modelData.requests }
+    -- By default we set `delayTillRepeat` till 4 to ensure that if the user holds this key down we don't immediately
+    -- start executing it every keyboard frame. However, say the user is holding down the down arrow and a piece is
+    -- moving down the board. And say on that journey down there's a single gap on the right. If the user then also
+    -- presses the right arrow he means for the piece to slide into that gap when possible. If that happens to be while
+    -- waiting for the 4 keyboard frames to elapse, he'll miss that gap. So in that case we don't apply this delay.
+    let
+        delayTillRepeat =
+            if
+                (isMoveAction Game.Left action || isMoveAction Game.Right action)
+                    && List.any (.action >> isMoveAction Game.Down) modelData.requests
+            then
+                0
+
+            else
+                4
+    in
+    Model { modelData | requests = { action = action, delayTillRepeat = delayTillRepeat } :: modelData.requests }
+
+
+isMoveAction : Game.MoveDirection -> Game.UserAction -> Bool
+isMoveAction direction action =
+    case action of
+        Game.Move direction_ ->
+            direction_ == direction
+
+        _ ->
+            False
 
 
 removeRequest : Game.UserAction -> Model -> Model
@@ -133,7 +159,7 @@ handleKeyboardFrame (Model modelData) =
 
         actionsToExecute : List Game.UserAction
         actionsToExecute =
-            requests |> removeNonRepeatableActions |> removeInactive |> removeConflicts |> List.map .action
+            requests |> removeNonRepeatableActions |> removeConflicts |> removeInactive |> List.map .action
     in
     ( Model { modelData | requests = requests }, actionsToExecute )
 
